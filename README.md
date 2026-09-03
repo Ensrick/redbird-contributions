@@ -166,7 +166,7 @@ returns, and ABI limitations.
 | Feature | Windows X64 | Windows X86 | Linux X64 | Linux X86 |
 |---|:---:|:---:|:---:|:---:|
 | Native detours | ✓ | ✓ | ✓ | Build-supported |
-| Safe peer-thread patching | ✓ | ✓ | — | — |
+| Safe peer-thread patching | ✓ | ✓ | ✓ | — |
 | X86 convention adapters | — | ✓ | — | Build-supported |
 | X64 vectorcall adapters | ✓ | — | ✓ | — |
 | PolyHook2 backend | ✓ | Dependency-supported | ✓ | — |

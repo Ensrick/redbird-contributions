@@ -9,7 +9,6 @@ const requiredFiles = [
   'docs/images/logo.png',
   'README.md',
   'CHANGELOG.md',
-  '.env.example',
   'scripts/ci/prepare-release.sh',
   'scripts/ci/publish-packages.sh',
   'scripts/ci/run-tests.ps1',
@@ -21,7 +20,7 @@ for (const file of requiredFiles) {
 }
 
 const pipeline = parse(fs.readFileSync('.gitlab-ci.yml', 'utf8'));
-for (const job of ['build', 'test:x64', 'test:x86', 'docs', 'package', 'pages', 'release']) {
+for (const job of ['build', 'test:x64', 'test:x86', 'test:linux-x64', 'docs', 'package', 'pages', 'release']) {
   if (!pipeline[job]) throw new Error(`GitLab pipeline is missing job '${job}'.`);
 }
 if (pipeline.variables?.GIT_DEPTH !== '0') throw new Error('semantic-release requires GIT_DEPTH=0.');

@@ -9,7 +9,7 @@ The signal handler remains installed for the process lifetime. This makes a sign
 Run the native integration test on a normal x86-64 Linux host with `/proc` mounted:
 
 ```sh
-./build.sh
+sh ./build.sh
 cc -O2 -Wall -Wextra -Werror -pthread -ldl \
   -o redbird_thread_patch_test redbird_thread_patch_test.c
 ./redbird_thread_patch_test ../../runtimes/linux-x64/native/libredbird_thread_patch.so

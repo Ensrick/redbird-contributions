@@ -52,7 +52,7 @@ public sealed class DataScanner
     /// <summary>Absolute virtual address the scanner is currently pointing at.</summary>
     public UInt64 CurrentAddress => _currentAddress;
 
-    /// <summary>Whether the last <see cref="Scan"/> found its pattern.</summary>
+    /// <summary>Whether the last <see cref="Scan(string, int)"/> found its pattern.</summary>
     public bool Found => _scanSuccess;
 
     // =========================================================================

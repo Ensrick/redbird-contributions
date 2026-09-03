@@ -51,8 +51,21 @@ cache:
 validate:config:
   stage: validate
   image: node:22.22.2-bookworm
+  variables:
+    # Keep npm's download cache inside the project so GitLab can preserve it between pipelines.
+    NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.npm"
+  # Override the global NuGet cache: this Node-only job does not restore NuGet packages.
+  cache:
+    key:
+      prefix: "npm"
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
   script:
-    - npm ci --ignore-scripts
+    # Auditing is a separate concern from deterministic installation and can make CI wait on the
+    # public npm audit service. Dependency versions remain locked by package-lock.json.
+    - npm ci --ignore-scripts --no-audit --no-fund
     - npm run validate:config
 
 # Compile the complete solution once in Release mode. --no-restore is safe here because the preceding command restores packages in the same job. Each job otherwise starts in a clean image.
@@ -95,15 +108,16 @@ test:x86:
     reports:
       junit: artifacts/test-results/x86-junit.xml
 
-# Exercise the Linux signal/futex patch window on a real CLR process. The native
-# smoke test also verifies the ucontext ABI and the helper's no-write failure paths.
+# Exercise the Linux signal/futex patch window on a real CLR process. 
+# The native moke test also verifies the ucontext ABI and the helper's no-write failure paths.
 test:linux-x64:
   stage: test
   image: mcr.microsoft.com/dotnet/sdk:10.0
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends build-essential
   script:
-    - src/RedBird.Core/native/linux-x64/build.sh
+    # Invoke the script through sh so a checkout made from a ZIP does not depend on Unix mode bits.
+    - sh src/RedBird.Core/native/linux-x64/build.sh
     - gcc -O2 -std=gnu11 -Wall -Wextra -Werror -pthread -ldl -o /tmp/redbird_thread_patch_test src/RedBird.Core/native/linux-x64/redbird_thread_patch_test.c
     - /tmp/redbird_thread_patch_test "$CI_PROJECT_DIR/src/RedBird.Core/runtimes/linux-x64/native/libredbird_thread_patch.so"
     - dotnet restore src/RedBird.X64.Tests/RedBird.X64.Tests.csproj
@@ -200,7 +214,7 @@ release:
     - curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
     - bash /tmp/dotnet-install.sh --channel 10.0 --install-dir "$CI_PROJECT_DIR/.dotnet"
     - export PATH="$CI_PROJECT_DIR/.dotnet:$PATH"
-    - npm ci --ignore-scripts
+    - npm ci --ignore-scripts --no-audit --no-fund
   script:
     # Use the repository-pinned semantic-release installation rather than allowing npx to download a different version. 
     # NUGET_USERNAME must be configured as a protected CI/CD variable.
