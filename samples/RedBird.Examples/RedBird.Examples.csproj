@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks></TargetFrameworks>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>RedBird.Examples</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\RedBird.Backends.NativeX64\RedBird.Backends.NativeX64.csproj" />
+    <ProjectReference Include="..\..\src\RedBird.X64\RedBird.X64.csproj" />
+  </ItemGroup>
+</Project>

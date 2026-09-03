@@ -1,0 +1,25 @@
+
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>RedBird.Backends.MinHook</RootNamespace>
+    <AssemblyName>RedBird.Backends.MinHook</AssemblyName>
+    <Title>RedBird.NET MinHook Backend</Title>
+    <Description>MinHook.NET detour engine for RedBird. Implements IHookBackend so transactions can install function detours through MinHook.NET, a fully managed port of MinHook. Windows-only, but works on both x86 and x64.</Description>
+    <PackageTags>Interop;Hooking;Detours;MinHook;Backend</PackageTags>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!--
+    Abstractions only, like every other engine package: architecture packages and engine packages
+    stay independent of each other.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\RedBird.Abstractions\RedBird.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="MinHook.NET" />
+  </ItemGroup>
+</Project>

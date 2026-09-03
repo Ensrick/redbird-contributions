@@ -1,0 +1,6 @@
+* text=auto
+
+# Bash runs in Linux GitLab jobs; keep scripts executable-compatible and free of CRLF characters.
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

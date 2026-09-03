@@ -1,93 +1,229 @@
-# Zhuqiaomon
 
+<div align="center">
+<img src="docs/images/logo.png" alt="logo" width="256" height="256"/>
 
+# RedBird.NET
 
-## Getting started
+RedBird is a ([mostly](src/RedBird.Core/native/linux-x64/README.md)) managed native-hooking toolkit for .NET. 
+It offers X64 and X86 detour engines, transactional pattern-based hooks, executable-memory helpers, modular backends, and calling convention intermediary stubs.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+<br/>
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+| CI/CD | Release | Tech Stack | Platform | License |
+|:---:|:---:|:---:|:---:|:---:|
+| [![pipeline](https://gitlab.com/Rawra/redbird/badges/main/pipeline.svg)](https://gitlab.com/Rawra/redbird/-/pipelines) | [![latest release](https://gitlab.com/Rawra/redbird/-/badges/release.svg)](https://gitlab.com/Rawra/redbird/-/releases) | ![x64](https://img.shields.io/badge/CPU-x64-orange) ![C#](https://img.shields.io/badge/C%23-239120?logo=c-sharp&logoColor=white) [![Iced](https://img.shields.io/badge/Iced-000000)](https://github.com/icedland/iced)| ![Windows](https://img.shields.io/badge/OS-Windows-0078D6?logo=windows)  ![Linux](https://img.shields.io/badge/OS-Linux-FCC624?logo=linux&logoColor=black) | [![license](https://img.shields.io/badge/license-LGPL--3.0--or--later-blue.svg)](LICENSE.txt)
 
-## Add your files
+</div>
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+## Highlights
 
+- Managed native X64 and X86 detour backends with relocated-original trampolines.
+- Safe executable-code patching on Windows X64/X86 and Linux X64: peer threads are parked while instruction pointers inside a replaced prologue are moved to their trampoline equivalents.
+- Hook chaining with safe reverse-order unhooking.
+- Pattern (wildcard AOB), address, RVA, and export targets with transactional commit and rollback policies.
+- Context hooks, inline hooks, function clones, stateful assembly patches, and instruction walkers.
+- Public runtime-assembled executable functions for X64 and X86.
+- Supports X86 cdecl, stdcall, fastcall, thiscall, GCC, Pascal, and custom register/stack layouts.
+- Supports X64 managed ABI and Microsoft `__vectorcall` intermediary stubs in both directions, including scalar, SIMD, HVA, and supported aggregate-return layouts on Windows and System V Linux.
+- Multi-targeted packages for `net10.0` and .NET Framework 4.8.
+
+## Packages
+
+```shell
+dotnet add package RedBird
+dotnet add package RedBird.Extensions.CallingConventions
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/Rawra/zhuqiaomon.git
-git branch -M main
-git push -uf origin main
+
+The `RedBird` meta-package includes the main X64/X86 libraries and native backends. 
+Every package can also be referenced separately:
+
+| Package | Purpose |
+|---|---|
+| `RedBird` | Meta-package for the main X64/X86 libraries and native backends |
+| `RedBird.Abstractions` | Backend-agnostic hook, transaction, and ABI contracts |
+| `RedBird.Core` | Executable memory, scanners, platform helpers, and the Linux X64 patch companion |
+| `RedBird.X64` | X64 scanners, transactions, inline/context hooks, and executable functions |
+| `RedBird.X86` | X86 hooks and executable functions |
+| `RedBird.Backends.NativeX64` | Managed X64 function-detour engine |
+| `RedBird.Backends.NativeX86` | Managed X86 function-detour engine |
+| `RedBird.Backends.PolyHook2` | Optional PolyHook2 backend with safe logical chaining |
+| `RedBird.Backends.MinHook` | Optional MinHook.NET backend |
+| `RedBird.Extensions.CallingConventions` | X86 convention and X64 vectorcall adapters |
+
+## Example: assemble and detour a real function
+
+This self-contained example creates native code, calls it, hooks it, calls the relocated original, and restores it. The complete runnable version lives in [samples/RedBird.Examples](samples/RedBird.Examples/Program.cs).
+
+```csharp
+using System;
+using System.Runtime.InteropServices;
+using Iced.Intel;
+using RedBird.Abstractions.Hooks;
+using RedBird.Backends.NativeX64;
+using RedBird.X64.Assembly;
+using static Iced.Intel.AssemblerRegisters;
+
+internal static class Program
+{
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    private delegate int BinaryInt(int left, int right);
+
+    private static void Main()
+    {
+        using var target = ExecutableFunction.Create(assembler =>
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                assembler.mov(eax, ecx);
+                assembler.add(eax, edx);
+            }
+            else
+            {
+                assembler.mov(eax, edi);
+                assembler.add(eax, esi);
+            }
+            for (var i = 0; i < 20; i++) assembler.nop();
+            assembler.ret();
+        });
+
+        var call = target.GetDelegate<BinaryInt>();
+        IDetour<BinaryInt>? hook = null;
+        hook = NativeDetourBackend.Instance.CreateDetour(new DetourRequest<BinaryInt>
+        {
+            Name = "multiply-add-result",
+            TargetAddress = target.Address,
+            Callback = (a, b) => hook!.Original(a, b) * 10,
+        });
+
+        using (hook)
+        {
+            Console.WriteLine(call(3, 4)); // 7
+            hook.Enable();
+            Console.WriteLine(call(3, 4)); // 70
+        }
+        Console.WriteLine(call(3, 4)); // 7
+    }
+}
 ```
 
-## Integrate with your tools
+## Example: adapt an X86 fastcall target
 
-* [Set up project integrations](https://gitlab.com/Rawra/zhuqiaomon/-/settings/integrations)
+The delegate describes the managed cdecl view. The intermediary factory generates both directions:
+native fastcall -> managed callback and managed `Original` call -> native fastcall.
 
-## Collaborate with your team
+```csharp
+using System.Runtime.InteropServices;
+using RedBird.Abstractions.CallingConventions;
+using RedBird.Abstractions.Hooks;
+using RedBird.Backends.NativeX86;
+using RedBird.Extensions.CallingConventions.NativeX86;
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+delegate int NativeFunction(int first, int second, int third);
 
-## Test and Deploy
+var request = new DetourRequest<NativeFunction>
+{
+    Name = "fastcall-target",
+    TargetAddress = targetAddress,
+    Callback = callback,
+    IntermediaryFactory =
+        new X86CallingConventionIntermediaryFactory<NativeFunction>(X86CallingConvention.Fastcall),
+};
 
-Use the built-in continuous integration in GitLab.
+using var hook = X86DetourBackend.Instance.CreateDetour(request);
+hook.Enable();
+```
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+Custom X86 layouts use `[X86CallingConvention]`, `[X86RegisterArgument]`, explicit stack cleanup,
+argument order, and optional custom return registers.
 
-***
+## Example: bridge the managed X64 ABI and vectorcall
 
-# Editing this README
+```csharp
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using RedBird.Abstractions.Hooks;
+using RedBird.Extensions.CallingConventions.NativeX64;
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+delegate float VectorOperation(float scale, [VectorcallArgument(16)] Vector128<float> value);
 
-## Suggestions for a good README
+var request = new DetourRequest<VectorOperation>
+{
+    Name = "vectorcall-target",
+    TargetAddress = targetAddress,
+    Callback = callback,
+    IntermediaryFactory = new X64VectorcallIntermediaryFactory<VectorOperation>(),
+};
+```
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+The factory wraps both the callback entry and `Original` trampoline path. See the
+[calling-convention guide](docs/articles/calling-conventions.md) for HVA annotations, supported
+returns, and ABI limitations.
 
-## Name
-Choose a self-explaining name for your project.
+## Platform support
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+| Feature | Windows X64 | Windows X86 | Linux X64 | Linux X86 |
+|---|:---:|:---:|:---:|:---:|
+| Native detours | ✓ | ✓ | ✓ | Build-supported |
+| Safe peer-thread patching | ✓ | ✓ | — | — |
+| X86 convention adapters | — | ✓ | — | Build-supported |
+| X64 vectorcall adapters | ✓ | — | ✓ | — |
+| PolyHook2 backend | ✓ | Dependency-supported | ✓ | — |
+| MinHook backend | ✓ | ✓ | — | — |
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+Build-supported means the code compiles for that combination but is not exercised by this
+repository's CI runners.
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+### Safe patching on Linux X64
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+`NativeDetourBackend` protects enable and disable operations by default on Linux X64 when
+`/proc/self/maps` is available. Its packaged, C-runtime-free native companion (`libredbird_thread_patch.so`) selects an unused real-time signal, parks peer threads on futexes, relocates a saved instruction pointer when it falls inside the displaced prologue, applies the patch, restores page protections, and releases the threads.
+The installed hook has no additional steady-state overhead from this mechanism.
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+The selected signal remains reserved for the process lifetime. 
+If a peer thread blocks it, another component replaces its handler, thread enumeration fails, or all peers cannot be parked within five seconds, RedBird reports the failure without writing the patch. 
+Set `SuspendThreadsDuringPatch` to `false` only when the host provides its own safe point or when you accept the patching race.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+See [Getting started: configure safe patching](docs/articles/getting-started.md#configure-safe-patching) and the [native companion notes](src/RedBird.Core/native/linux-x64/README.md).
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+## Build, test, docs, and package
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+```shell
+dotnet restore RedBird.slnx
+dotnet build RedBird.slnx -c Release --no-restore
+dotnet tool restore
+dotnet tool run docfx docs/docfx.json
+dotnet pack RedBird.slnx -c Release --no-build -p:PackageVersion=0.1.0
+```
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+Windows execution tests are architecture-specific:
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+```powershell
+./scripts/ci/run-tests.ps1 -Architecture X64
+./scripts/ci/run-tests.ps1 -Architecture X86
+```
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+GitLab CI also rebuilds and smoke-tests the native Linux X64 companion, then runs the X64 test suite
+on Linux. 
+The companion's standalone build and test commands are documented in its
+[native README](src/RedBird.Core/native/linux-x64/README.md).
+
+## Documentation
+
+- [Getting started](docs/articles/getting-started.md#getting-started)
+- [Hooks and backends](docs/articles/hooks-and-backends.md)
+- [Calling conventions](docs/articles/calling-conventions.md)
+- [Executable functions](docs/articles/executable-functions.md)
+- [API documentation](docs/api/index.md)
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+RedBird.NET is licensed under [LGPL-3.0-or-later](LICENSE.txt).
+
+## Credits and Thanks
+
+- 0xd4d and the contributors of the amazing [Iced](https://github.com/icedland/iced) dis(assembler) engine! (Seriously its cracked)
+- Stevemk14ebr and the contributors of the native [PolyHook2](https://github.com/stevemk14ebr/PolyHook_2_0) hooking library (Pretty much the best standalone hooking lib out there I reckon)
+- -1212 (Safe Linux64 patching)
+- Henry (The picture used for the logo - CC-BY-2.0, please see [ATTRIBUTIONS.md](docs/ATTRIBUTIONS.md#project-logo))

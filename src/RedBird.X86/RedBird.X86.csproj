@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>RedBird.X86</RootNamespace>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <Title>RedBird.NET x86</Title>
+    <Description>x86 (32-bit) inline hooking backend.</Description>
+    <PackageTags>Interop;x86;Hooking;InlineHooks;Iced</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RedBird.Abstractions\RedBird.Abstractions.csproj" />
+    <ProjectReference Include="..\RedBird.Backends.NativeX86\RedBird.Backends.NativeX86.csproj" />
+    <ProjectReference Include="..\RedBird.Core\RedBird.Core.csproj" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <!-- Same building blocks X64 uses for decode/encode, keep versions identical via Directory.Packages.props. -->
+    <PackageReference Include="Iced" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,22 @@
+﻿
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>RedBird.Backends.NativeX86</RootNamespace>
+    <AssemblyName>RedBird.Backends.NativeX86</AssemblyName>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <Title>RedBird.NET Native x86 Detour Engine</Title>
+    <Description>A managed x86 function-detour engine, based on PolyHook2</Description>
+    <PackageTags>Interop;x86;Hooking;Detours;Trampoline;Iced</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RedBird.Abstractions\RedBird.Abstractions.csproj" />
+    <ProjectReference Include="..\RedBird.Core\RedBird.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Iced" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+</Project>

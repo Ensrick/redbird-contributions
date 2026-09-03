@@ -1,0 +1,14 @@
+# This file is the top-most .editorconfig file.
+root = true
+
+# C# files
+[src/**.cs]
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+end_of_line = lf
+
+# Enforce explicit variables (no 'var')
+csharp_style_var_for_built_in_types = false:error
+csharp_style_var_when_type_is_apparent = false:error
+csharp_style_var_elsewhere = false:error

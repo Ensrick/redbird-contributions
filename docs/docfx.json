@@ -1,0 +1,44 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "src": "..",
+          "files": ["src/**/*.csproj"],
+          "exclude": ["src/**/*.Tests.csproj", "src/RedBird/RedBird.csproj"]
+        }
+      ],
+      "dest": "api",
+      "properties": {
+        "TargetFramework": "net10.0",
+        "Configuration": "Release"
+      }
+    }
+  ],
+  "build": {
+    "content": [
+      { "files": ["index.md", "toc.yml"] },
+      { "files": ["articles/**/*.md", "articles/**/toc.yml"] },
+      { "files": ["api/**/*.yml", "api/index.md"] },
+      { "files": ["images/**"] }
+    ],
+    "output": "_site",
+    "template": ["default", "modern"],
+    "globalMetadata": {
+      "_appName": "RedBird",
+      "_appTitle": "RedBird documentation",
+      "_appFooter": "RedBird · LGPL-3.0-or-later",
+      "_enableSearch": true,
+      "_enableNewTab": true,
+      "_gitContribute": {
+        "repo": "https://gitlab.com/Rawra/redbird",
+        "branch": "main"
+      }
+    },
+    "sitemap": {
+      "baseUrl": "https://rawra.gitlab.io/redbird",
+      "changefreq": "weekly",
+      "priority": 0.5
+    }
+  }
+}

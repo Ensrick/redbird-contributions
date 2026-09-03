@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>RedBird.Core</RootNamespace>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <Title>RedBird.NET Core</Title>
+    <Description>Architecture-agnostic foundation: Windows P/Invoke surface, native memory allocation/pooling, pattern scanning, managed native-memory wrappers, and Iced code reader/writer adapters shared by every architecture-specific hooking backend.</Description>
+    <PackageTags>Interop;Memory;Pattern Scanning;Iced</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Iced" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RedBird.Abstractions\RedBird.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="runtimes\linux-x64\native\libredbird_thread_patch.so"
+          Pack="True"
+          PackagePath="runtimes/linux-x64/native/"
+          CopyToOutputDirectory="PreserveNewest"
+          CopyToPublishDirectory="PreserveNewest"
+          Link="libredbird_thread_patch.so"
+          TargetPath="libredbird_thread_patch.so" />
+  </ItemGroup>
+</Project>

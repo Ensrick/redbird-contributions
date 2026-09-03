@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>RedBird.Extensions.CallingConventions</RootNamespace>
+    <AssemblyName>RedBird.Extensions.CallingConventions</AssemblyName>
+    <Title>RedBird.NET Calling Convention Adapters</Title>
+    <Description>Calling-convention intermediary stubs for RedBird native detours.</Description>
+    <PackageTags>Interop;Hooking;CallingConvention;x86;x64;vectorcall</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RedBird.Abstractions\RedBird.Abstractions.csproj" />
+    <ProjectReference Include="..\RedBird.Core\RedBird.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Iced" />
+  </ItemGroup>
+</Project>

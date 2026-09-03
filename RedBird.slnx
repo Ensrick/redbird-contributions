@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/RedBird.Backends.PolyHook2/RedBird.Backends.PolyHook2.csproj" />
+    <Project Path="src/RedBird.Extensions.CallingConventions/RedBird.Extensions.CallingConventions.csproj" />
+    <Project Path="src/RedBird.X64.Tests/RedBird.X64.Tests.csproj" />
+    <Project Path="src/RedBird.X64/RedBird.X64.csproj" />
+    <Project Path="src/RedBird.X86.Tests/RedBird.X86.Tests.csproj" />
+    <Project Path="src/RedBird.Backends.NativeX86/RedBird.Backends.NativeX86.csproj" />
+    <Project Path="src/RedBird.Backends.MinHook/RedBird.Backends.MinHook.csproj" />
+    <Project Path="src/RedBird.Backends.NativeX64/RedBird.Backends.NativeX64.csproj" />
+    <Project Path="src/RedBird.Abstractions/RedBird.Abstractions.csproj" />
+    <Project Path="src/RedBird.Core/RedBird.Core.csproj" />
+    <Project Path="src/RedBird.X86/RedBird.X86.csproj" />
+    <Project Path="src/RedBird/RedBird.csproj" />
+  </Folder>
+</Solution>

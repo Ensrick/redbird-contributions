@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>RedBird.X86.Tests</RootNamespace>
+    <AssemblyName>RedBird.X86.Tests</AssemblyName>
+    <PlatformTarget>x86</PlatformTarget>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <OutputType>Exe</OutputType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Iced" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RedBird.Core\RedBird.Core.csproj" />
+    <ProjectReference Include="..\RedBird.Extensions.CallingConventions\RedBird.Extensions.CallingConventions.csproj" />
+    <ProjectReference Include="..\RedBird.X86\RedBird.X86.csproj" />
+    <ProjectReference Include="..\RedBird.Backends.NativeX86\RedBird.Backends.NativeX86.csproj" />
+  </ItemGroup>
+</Project>

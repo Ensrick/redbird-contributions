@@ -1,0 +1,39 @@
+<Project>
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net48</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <DebugType>Portable</DebugType>
+    <Deterministic>true</Deterministic>
+    <NoWarn>$(NoWarn);1591;8618</NoWarn>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)bin\$(MSBuildProjectName)\</BaseOutputPath>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+    <PolySharpUseEmbeddedAttributeForGeneratedTypes>true</PolySharpUseEmbeddedAttributeForGeneratedTypes>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <!-- Shared NuGet metadata. Individual csproj files only override what differs (Title/Description/Tags). -->
+    <Authors>Viktor Legodzinski</Authors>
+    <PackageProjectUrl>https://gitlab.com/Rawra/RedBird</PackageProjectUrl>
+    <RepositoryUrl>https://gitlab.com/Rawra/RedBird</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>LGPL-3.0-or-later</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <PackageIcon>logo.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- Every package ships the same license/icon/readme without repeating <None Include> in each csproj. -->
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)LICENSE.txt" Pack="True" PackagePath="/" />
+    <None Include="$(MSBuildThisFileDirectory)docs/images/logo.png" Pack="True" PackagePath="/" />
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="True" PackagePath="/" Condition="Exists('$(MSBuildThisFileDirectory)README.md')" />
+
+    <PackageReference Include="PolySharp" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+  </ItemGroup>
+</Project>

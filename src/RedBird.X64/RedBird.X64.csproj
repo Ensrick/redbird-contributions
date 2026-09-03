@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>RedBird.X64</RootNamespace>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <Title>RedBird.NET x64</Title>
+    <Description>Advanced x64 inline hooking for .NET: instruction/function walkers, transactional hook installation, stateful assembly patches, and CPU-context-aware detours built on Iced and PolyHook2.</Description>
+    <PackageTags>Interop;x64;Hooking;InlineHooks;Iced;PolyHook2</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RedBird.Abstractions\RedBird.Abstractions.csproj" />
+    <ProjectReference Include="..\RedBird.Core\RedBird.Core.csproj" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <PackageReference Include="Iced" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="PolyHook2.NET" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" />
+  </ItemGroup>
+</Project>

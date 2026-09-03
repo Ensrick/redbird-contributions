@@ -1,0 +1,53 @@
+{
+  "branches": ["main"],
+  "tagFormat": "v${version}",
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "conventionalcommits"
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits"
+      }
+    ],
+    "@semantic-release/changelog",
+    [
+      "@semantic-release/git",
+      {
+        "assets": ["CHANGELOG.md"],
+        "message": "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}"
+      }
+    ],
+    [
+      "@semantic-release/exec",
+      {
+        "prepareCmd": "bash scripts/ci/prepare-release.sh ${nextRelease.version}",
+        "publishCmd": "bash scripts/ci/publish-packages.sh ${nextRelease.version}"
+      }
+    ],
+    [
+      "@semantic-release/gitlab",
+      {
+        "assets": [
+          {
+            "path": "artifacts/packages/*.nupkg",
+            "type": "package"
+          },
+          {
+            "path": "artifacts/packages/*.snupkg",
+            "type": "package"
+          },
+          {
+            "path": "artifacts/redbird-docs-*.zip",
+            "label": "Documentation site",
+            "type": "other"
+          }
+        ]
+      }
+    ]
+  ]
+}

@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>RedBird.Backends.PolyHook2</RootNamespace>
+    <AssemblyName>RedBird.Backends.PolyHook2</AssemblyName>
+    <Title>RedBird.NET PolyHook2 Backend</Title>
+    <Description>PolyHook2 detour engine for RedBird. Implements IHookBackend so transactions can install function detours through PolyHook2.NET. Swap it for any other engine by referencing a different backend package.</Description>
+    <PackageTags>Interop;Hooking;Detours;PolyHook2;Backend</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RedBird.Abstractions\RedBird.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="PolyHook2.NET" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>RedBird</RootNamespace>
+    <Title>RedBird.NET</Title>
+    <Description>A library for advanced native hooking in .NET. This meta-package pulls in the supported x64 and x86 architecture packages; reference RedBird.X64 or RedBird.X86 directly if you only need one.</Description>
+    <PackageTags>Interop;x86;x64;Hooking;InlineHooks;Iced;PolyHook2</PackageTags>
+    <!-- No source files live here on purpose - this project is pure NuGet composition. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RedBird.X64\RedBird.X64.csproj" />
+    <ProjectReference Include="..\RedBird.Backends.NativeX64\RedBird.Backends.NativeX64.csproj" />
+    <ProjectReference Include="..\RedBird.X86\RedBird.X86.csproj" />
+  </ItemGroup>
+</Project>
