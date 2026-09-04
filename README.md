@@ -222,6 +222,14 @@ See [Getting started: configure safe patching](docs/articles/getting-started.md#
 
 ## Build, test, docs, and package
 
+On Linux x64, build the native thread-patching companion before creating distributable packages:
+
+```shell
+sh src/RedBird.Core/native/linux-x64/build.sh
+```
+
+Then build the managed projects, documentation, and packages:
+
 ```shell
 dotnet restore RedBird.slnx
 dotnet build RedBird.slnx -c Release --no-restore

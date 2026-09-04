@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Runtime.InteropServices;
 using Xunit;
 using RedBird.Core.Memory;
 using RedBird.Core.PInvoke;
@@ -17,20 +16,48 @@ namespace RedBird.X64.Tests;
 /// </remarks>
 public sealed unsafe class StubAllocatorTests
 {
-    /// <summary>An address in this process to allocate near. Any code address will do.</summary>
-    private static UInt64 SomeCodeAddress => (UInt64)Marshal.GetFunctionPointerForDelegate<Action>(static () => { });
+    /// <summary>Owns a normal executable mapping suitable for proximity-allocation tests.</summary>
+    /// <remarks>
+    /// A reverse-P/Invoke thunk returned by <c>Marshal.GetFunctionPointerForDelegate</c> is not a
+    /// stable allocator fixture: CoreCLR may place it inside a large reserved address-space region,
+    /// leaving no mappable hole in RedBird's rel32 window. The suite's detour targets use ordinary
+    /// executable mappings, which this lease models without depending on runtime-internal layout.
+    /// </remarks>
+    private sealed class NativeAnchor : IDisposable
+    {
+        public NativeAnchor()
+        {
+            Pointer = NativeMemoryManager.Alloc(PlatformInfo.PageSize, MemoryProtection.ExecuteRead);
+            if (Pointer == IntPtr.Zero)
+                throw new OutOfMemoryException("The operating system refused the executable mapping used as the stub-allocation anchor.");
+        }
+
+        public IntPtr Pointer { get; }
+
+        public UInt64 Address => (UInt64)Pointer;
+
+        public void Dispose()
+        {
+            if (!NativeMemoryManager.Free(Pointer, PlatformInfo.PageSize))
+                throw new InvalidOperationException("Could not release the stub-allocation test anchor.");
+        }
+    }
+
+    private static void AssertAllocated(IntPtr address)
+        => Assert.True(address != IntPtr.Zero,
+            NativeMemoryManager.LastAllocationFailure ?? "Stub allocation failed without a diagnostic.");
 
     [Fact]
     public void SuccessiveStubs_AreAllWritable()
     {
-        UInt64 anchor = SomeCodeAddress;
+        using NativeAnchor anchor = new();
 
         // The crash this guards: the first stub was written and then had its page flipped to execute-read, so the second stub, which was handed out of the same page, faulted on its first store.
         // It only showed up on the second detour of a function, which made it look like a chaining bug rather than an allocator one.
         for (int i = 0; i < 16; i++)
         {
-            IntPtr stub = NativeMemoryManager.AllocateStub(anchor, 64);
-            Assert.NotEqual(IntPtr.Zero, stub);
+            IntPtr stub = NativeMemoryManager.AllocateStub(anchor.Address, 64);
+            AssertAllocated(stub);
 
             byte[] payload = new byte[64];
             for (int b = 0; b < payload.Length; b++)
@@ -46,13 +73,13 @@ public sealed unsafe class StubAllocatorTests
     [Fact]
     public void StubsAreAllocatedWithinRelativeBranchRange()
     {
-        UInt64 anchor = SomeCodeAddress;
+        using NativeAnchor anchor = new();
 
-        IntPtr stub = NativeMemoryManager.AllocateStub(anchor, 64);
-        Assert.NotEqual(IntPtr.Zero, stub);
+        IntPtr stub = NativeMemoryManager.AllocateStub(anchor.Address, 64);
+        AssertAllocated(stub);
 
         UInt64 address = (UInt64)stub;
-        UInt64 distance = address > anchor ? address - anchor : anchor - address;
+        UInt64 distance = address > anchor.Address ? address - anchor.Address : anchor.Address - address;
 
         Assert.True(distance < 0x8000_0000UL, $"Stub is {distance:X} bytes from the anchor, outside rel32 range.");
     }
@@ -60,8 +87,9 @@ public sealed unsafe class StubAllocatorTests
     [Fact]
     public void WriteStub_RoundTripsAPointerSizedValue()
     {
-        IntPtr slot = NativeMemoryManager.AllocateStub(SomeCodeAddress, sizeof(UInt64));
-        Assert.NotEqual(IntPtr.Zero, slot);
+        using NativeAnchor anchor = new();
+        IntPtr slot = NativeMemoryManager.AllocateStub(anchor.Address, sizeof(UInt64));
+        AssertAllocated(slot);
 
         const UInt64 Value = 0x0123_4567_89AB_CDEFUL;
 
@@ -72,8 +100,9 @@ public sealed unsafe class StubAllocatorTests
     [Fact]
     public void FinalizeStub_RefusesASlabAllocation()
     {
-        IntPtr stub = NativeMemoryManager.AllocateStub(SomeCodeAddress, 64);
-        Assert.NotEqual(IntPtr.Zero, stub);
+        using NativeAnchor anchor = new();
+        IntPtr stub = NativeMemoryManager.AllocateStub(anchor.Address, 64);
+        AssertAllocated(stub);
 
         // Loud failure rather than a page-protection change that breaks the next caller.
         Assert.Throws<InvalidOperationException>(() => NativeMemoryManager.FinalizeStub(stub, 64));
@@ -99,13 +128,13 @@ public sealed unsafe class StubAllocatorTests
     [Fact]
     public void OlderSlab_RemainsTrackedAfterANewerSlabIsAllocated()
     {
-        UInt64 anchor = SomeCodeAddress;
-        IntPtr older = NativeMemoryManager.AllocateStub(anchor, 64);
-        Assert.NotEqual(IntPtr.Zero, older);
+        using NativeAnchor anchor = new();
+        IntPtr older = NativeMemoryManager.AllocateStub(anchor.Address, 64);
+        AssertAllocated(older);
 
         // A full-slab request cannot fit after the allocation above, so this necessarily rotates the allocator to another slab.
-        IntPtr newer = NativeMemoryManager.AllocateStub(anchor, 64 * 1024);
-        Assert.NotEqual(IntPtr.Zero, newer);
+        IntPtr newer = NativeMemoryManager.AllocateStub(anchor.Address, 64 * 1024);
+        AssertAllocated(newer);
         Assert.NotEqual(older, newer);
 
         Assert.True(NativeMemoryManager.WriteStub(older, new byte[] { 0x90, 0xC3 }));
@@ -116,7 +145,7 @@ public sealed unsafe class StubAllocatorTests
     public void UnconstrainedStub_IsWritableAndExecutableManagedMemory()
     {
         IntPtr stub = NativeMemoryManager.AllocateStub(16);
-        Assert.NotEqual(IntPtr.Zero, stub);
+        AssertAllocated(stub);
         Assert.True(NativeMemoryManager.WriteStub(stub, new byte[] { 0x90, 0xC3 }));
     }
 
@@ -129,9 +158,9 @@ public sealed unsafe class StubAllocatorTests
 
         const UInt64 Reach = 0x7000_0000UL;
         const UInt64 Size = 64 * 1024;
-        UInt64 anchor = SomeCodeAddress;
-        UInt64 low = anchor > Reach ? anchor - Reach : 0;
-        UInt64 high = anchor + Reach;
+        using NativeAnchor anchor = new();
+        UInt64 low = anchor.Address > Reach ? anchor.Address - Reach : 0;
+        UInt64 high = anchor.Address + Reach;
 
         UInt64 allocation = NativeMemoryManager.WindowsBoundAllocFallback(
             low,

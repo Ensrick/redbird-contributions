@@ -144,7 +144,7 @@ package:
   # This job rebuilds everything it packages, so it does not need test reports or the generated documentation downloaded from earlier jobs.
   dependencies: []
   before_script:
-    # The package-validation script needs unzip; the SDK image does not include it by default.
+    # The Linux runtime companion is generated from C source; package validation needs unzip.
     - apt-get update && apt-get install -y --no-install-recommends build-essential unzip
   script:
     # CI_PIPELINE_IID is a project-local, increasing pipeline number.
