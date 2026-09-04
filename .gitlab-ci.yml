@@ -141,12 +141,16 @@ docs:
 package:
   stage: package
   image: mcr.microsoft.com/dotnet/sdk:10.0
+  # This job rebuilds everything it packages, so it does not need test reports or the generated documentation downloaded from earlier jobs.
+  dependencies: []
   before_script:
     # The package-validation script needs unzip; the SDK image does not include it by default.
-    - apt-get update && apt-get install -y --no-install-recommends unzip
+    - apt-get update && apt-get install -y --no-install-recommends build-essential unzip
   script:
     # CI_PIPELINE_IID is a project-local, increasing pipeline number.
     - export PACKAGE_VERSION="0.0.0-ci.$CI_PIPELINE_IID"
+    # Jobs have isolated filesystems. Rebuild the native companion here instead of relying on the copy produced and exercised by test:linux-x64 in a different job.
+    - sh src/RedBird.Core/native/linux-x64/build.sh
     - dotnet restore RedBird.slnx
     - dotnet build RedBird.slnx -c Release --no-restore -p:Version="$PACKAGE_VERSION" -p:ContinuousIntegrationBuild=true
     - dotnet pack RedBird.slnx -c Release --no-build --no-restore -p:PackageVersion="$PACKAGE_VERSION" --output artifacts/packages
@@ -210,7 +214,8 @@ release:
       artifacts: false
   before_script:
     # This job needs both Node (for semantic-release) and .NET (for the release scripts), so the .NET SDK is installed into the otherwise Node-focused image.
-    - apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git jq unzip zip libicu-dev
+    # build-essential compiles the Linux runtime companion again for the final release packages.
+    - apt-get update && apt-get install -y --no-install-recommends build-essential ca-certificates curl git jq unzip zip libicu-dev
     - curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
     - bash /tmp/dotnet-install.sh --channel 10.0 --install-dir "$CI_PROJECT_DIR/.dotnet"
     - export PATH="$CI_PROJECT_DIR/.dotnet:$PATH"
