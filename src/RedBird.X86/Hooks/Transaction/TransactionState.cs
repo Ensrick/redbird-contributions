@@ -1,7 +1,3 @@
-using System;
-using System.Collections.Generic;
-using System.Text;
-
 namespace RedBird.X86.Hooks.Transaction;
 
 /// <summary>Where a transaction is in its lifecycle.</summary>

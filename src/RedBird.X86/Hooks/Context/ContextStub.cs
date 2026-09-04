@@ -11,10 +11,12 @@ namespace RedBird.X86.Hooks.Context;
 /// <summary>Builds the intermediary assembly and managed exception guard for an x86 context hook.</summary>
 public static class ContextStub
 {
-    public static ContextHookDelegate Guard(ContextHookDelegate callback, ContextHookOptions options, UInt64 hookAddress, ILogger logger)
+    public static ContextHookDelegate Guard(ContextHookDelegate callback, ContextHookOptions options, UInt64 hookAddress, ILogger logger, string? name = null)
     {
         if (options.ErrorMode == CallbackErrorMode.Rethrow)
             return callback;
+
+        string displayName = name ?? $"0x{hookAddress:X8}";
 
         return context =>
         {
@@ -24,7 +26,7 @@ public static class ContextStub
             }
             catch (Exception exception)
             {
-                logger.LogError(exception, "Unhandled exception in x86 context hook at 0x{HookAddress:X8}.", hookAddress);
+                logger.LogError(exception, "[{Name}] unhandled exception in x86 context hook at 0x{HookAddress:X8}.", displayName, hookAddress);
                 if (options.ErrorMode != CallbackErrorMode.LogAndContinueWithRecovery || options.RecoveryAction is null)
                     return;
 
@@ -34,7 +36,7 @@ public static class ContextStub
                 }
                 catch (Exception recoveryException)
                 {
-                    logger.LogError(recoveryException, "Exception in x86 context-hook recovery at 0x{HookAddress:X8}.", hookAddress);
+                    logger.LogError(recoveryException, "[{Name}] exception in x86 context-hook recovery at 0x{HookAddress:X8}.", displayName, hookAddress);
                 }
             }
         };

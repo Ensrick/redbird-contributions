@@ -65,6 +65,9 @@ var backend = new NativeDetourBackend(new NativeDetourOptions
 The option affects installation/removal latency only. 
 On Linux x86-64, the packaged native companion reserves one otherwise-unused real-time signal for the process lifetime.
 
+On Unity Mono profiles where `GC.TryStartNoGCRegion` exists but throws `NotImplementedException`, RedBird continues through its allocation-free critical patch routine without no-GC mode. 
+A runtime that implements the API but refuses the requested budget is still treated as a pre-install failure.
+
 It fails without writing if a peer blocks that signal, another component replaces its handler, thread
 enumeration fails, or every peer cannot be parked within five seconds. 
 

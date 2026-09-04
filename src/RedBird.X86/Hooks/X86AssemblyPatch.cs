@@ -241,7 +241,7 @@ public sealed class X86AssemblyPatch : IHook
     {
         if (_originalBytesBackup.Length == 0)
         {
-            _logger.LogError("No byte snapshot for 0x{Address:X8}; refusing to restore and leaving the patch installed.", _targetAddress);
+            _logger.LogError("[{Name}] no byte snapshot for 0x{Address:X8}; refusing to restore and leaving the patch installed.", Name, _targetAddress);
             return;
         }
 
@@ -251,7 +251,7 @@ public sealed class X86AssemblyPatch : IHook
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to restore the original bytes at 0x{Address:X8}.", _targetAddress);
+            _logger.LogError(ex, "[{Name}] failed to restore the original bytes at 0x{Address:X8}.", Name, _targetAddress);
         }
     }
 

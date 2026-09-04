@@ -22,8 +22,7 @@ public static unsafe class InstructionCache
 
         if (PlatformInfo.IsWindows)
         {
-            NativeMethods.FlushInstructionCache(CurrentProcessHandle, (IntPtr)address, (UIntPtr)length);
-            return true;
+            return WindowsMemoryMethods.FlushInstructionCache(CurrentProcessHandle, (IntPtr)address, (UIntPtr)length);
         }
 
         if (PlatformInfo.HasCoherentInstructionCache)

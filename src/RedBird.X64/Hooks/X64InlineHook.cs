@@ -175,15 +175,15 @@ public sealed class X64InlineHook : IHook
             throw new InvalidOperationException($"Stub for 0x{_targetAddress:X16} encoded to {stub.Length} bytes but only {estimatedSize} were reserved.");
         }
 
-        // The stub lives in the shared slab. On a W^X host that mapping is execute-read, so a direct copy faults; and raising it to write+execute here would leave every other stub on
-        // the page writable-executable for good. WriteStub opens a window only if the host needs one, restores the slab's baseline, and flushes the instruction cache.
+        // The stub lives in the shared slab. On a W^X host that mapping is execute-read, so a direct copy faults; and raising it to write+execute here would leave every other stub on the page writable-executable for good.
+        // WriteStub opens a window only if the host needs one, restores the slab's baseline, and flushes the instruction cache.
         if (!NativeMemoryManager.WriteStub(_stubAddress, stub))
         {
             State = HookState.Failed;
             throw new InvalidOperationException($"Could not write the stub for 0x{_targetAddress:X16}.");
         }
 
-        _logger.InlineHookStubCompiled(_stubAddress, stub.Length, _targetAddress);
+        _logger.InlineHookStubCompiled(Name, (UInt64)_stubAddress, stub.Length, _targetAddress);
     }
 
     // -------------------------------------------------------------------------
@@ -197,7 +197,7 @@ public sealed class X64InlineHook : IHook
             return;
 
         if (_targetAddress == 0 || _stubAddress == IntPtr.Zero)
-            throw new InvalidOperationException($"Hook '{Name}' has no stub; call Generate before Enable.");
+            throw new InvalidOperationException($"Hook [{Name}] has no stub; call Generate before Enable.");
 
         // FF 25 00 00 00 00   JMP QWORD PTR [RIP+0]
         // <8 bytes>           absolute target
@@ -223,7 +223,7 @@ public sealed class X64InlineHook : IHook
         CodePatch.Write(_targetAddress, patch);
 
         State = HookState.Installed;
-        _logger.InlineHookEnabled(_targetAddress, _stubAddress);
+        _logger.InlineHookEnabled(Name, _targetAddress, (UInt64)_stubAddress);
     }
 
     /// <inheritdoc/>
@@ -235,7 +235,7 @@ public sealed class X64InlineHook : IHook
         RestoreOriginalBytes();
 
         State = HookState.Disabled;
-        _logger.InlineHookDisabled(_targetAddress);
+        _logger.InlineHookDisabled(Name, _targetAddress);
     }
 
     private void RestoreOriginalBytes()
@@ -243,7 +243,7 @@ public sealed class X64InlineHook : IHook
         if (_originalBytesBackup.Length == 0)
         {
             // Should be unreachable now that the constructor snapshots the bytes, but a partial restore is worse than none, so refuse rather than reassemble a best guess.
-            _logger.LogError("No byte snapshot for 0x{TargetAddress:X16}; refusing to restore and leaving the hook installed.", _targetAddress);
+            _logger.LogError("[{Name}] no byte snapshot for 0x{TargetAddress:X16}; refusing to restore and leaving the hook installed.", Name, _targetAddress);
             return;
         }
 
@@ -253,7 +253,7 @@ public sealed class X64InlineHook : IHook
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to restore the original bytes at 0x{TargetAddress:X16}.", _targetAddress);
+            _logger.LogError(ex, "[{Name}] failed to restore the original bytes at 0x{TargetAddress:X16}.", Name, _targetAddress);
         }
     }
 

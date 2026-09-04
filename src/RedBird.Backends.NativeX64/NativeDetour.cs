@@ -67,19 +67,24 @@ public sealed unsafe class NativeDetour<TFunction> : IDetour<TFunction> where TF
         }
 
         // Try each scheme in preference order. A scheme fails either because its patch does not fit the prologue or because it needs memory nobody can provide.
+        List<string> failures = [];
         foreach (DetourScheme scheme in options.ResolveOrder())
         {
             int patchSize = JumpFactory.GetPatchSize(scheme);
 
             if (!PrologueAnalyzer.TrySelectPrologue(resolved, instructions, branchSources, patchSize, _logger, out PrologueSelection? prologue) || prologue is null)
             {
+                failures.Add($"{scheme}: the function does not expose {patchSize} safe bytes at an instruction boundary");
                 _logger.LogDebug("[{Name}]: scheme {Scheme} needs {Size} bytes, which the prologue cannot give.", Name, scheme, patchSize);
                 continue;
             }
 
-            IntPtr trampoline = TrampolineBuilder.Build(prologue, _logger, out int trampolineSize, out InstructionPointerMap? instructionPointers);
+            IntPtr trampoline = TrampolineBuilder.Build(prologue, _logger, out int trampolineSize, out InstructionPointerMap? instructionPointers, out string? trampolineFailure);
             if (trampoline == IntPtr.Zero)
+            {
+                failures.Add($"{scheme}: {trampolineFailure ?? "trampoline construction failed"}");
                 continue;
+            }
 
             DetourIntermediaryStubs? intermediary = null;
             IntPtr hookEntryPoint = callbackPointer;
@@ -94,10 +99,11 @@ public sealed unsafe class NativeDetour<TFunction> : IDetour<TFunction> where TF
                 originalEntryPoint = intermediary.OriginalEntryPoint;
             }
 
-            DetourPatch? patch = JumpFactory.TryBuild(scheme, resolved, (UInt64)hookEntryPoint);
+            DetourPatch? patch = JumpFactory.TryBuild(scheme, resolved, (UInt64)hookEntryPoint, out string? patchFailure);
             if (patch is null)
             {
                 intermediary?.Dispose();
+                failures.Add($"{scheme}: {patchFailure ?? "entry-jump construction failed"}");
                 _logger.LogDebug("[{Name}]: scheme {Scheme} could not be built here.", Name, scheme);
                 continue;
             }
@@ -132,7 +138,8 @@ public sealed unsafe class NativeDetour<TFunction> : IDetour<TFunction> where TF
         }
 
         State = HookState.Failed;
-        throw new NotSupportedException($"No enabled detour scheme could be prepared at 0x{resolved:X16} for [{Name}]. The preceding logs identify whether prologue selection, relocation, or near-memory allocation failed.");
+        string attempts = failures.Count == 0 ? "No schemes were enabled." : $"Attempts: {string.Join("; ", failures)}.";
+        throw new NotSupportedException($"No enabled detour scheme could be prepared at 0x{resolved:X16} for [{Name}]. " + attempts);
     }
 
     /// <inheritdoc/>
@@ -205,7 +212,10 @@ public sealed unsafe class NativeDetour<TFunction> : IDetour<TFunction> where TF
 
             if (patchResult.RelocatedThreadCount > 0)
             {
-                _logger.LogDebug("[{Name}] redirected {Count} suspended thread(s) from the displaced prologue into its trampoline.", Name, patchResult.RelocatedThreadCount);
+                _logger.LogDebug(
+                    "[{Name}] redirected {Count} suspended thread(s) from the displaced prologue into its trampoline.",
+                    Name,
+                    patchResult.RelocatedThreadCount);
             }
 
             _logger.LogDebug("[{Name}] installed at 0x{Address:X16}.", Name, TargetAddress);
@@ -224,6 +234,7 @@ public sealed unsafe class NativeDetour<TFunction> : IDetour<TFunction> where TF
             {
                 // Something went on top after we did. Writing our saved bytes here would overwrite that layer's jump and silently unhook it while it still believes it is installed.
                 _logger.LogError("[{Name}] cannot uninstall from 0x{Address:X16}: the entry point no longer holds this detour's patch, so another layer went on top. Unhook in reverse order, or set SafeUnhook to false to restore regardless.", Name, TargetAddress);
+
                 return;
             }
 

@@ -78,17 +78,16 @@ internal sealed unsafe class MemoryProtectionScope : IDisposable
 
         while (current < pageEnd)
         {
-            NativeMethods.Win32MEMORY_BASIC_INFORMATION info = default;
-            if (NativeMethods.VirtualQueryEx(InstructionCache.CurrentProcessHandle, (IntPtr)current, &info, infoSize) == 0)
+            if (WindowsMemoryMethods.VirtualQuery((IntPtr)current, out NativeMethods.Win32MEMORY_BASIC_INFORMATION info, (UIntPtr)infoSize) == UIntPtr.Zero)
             {
-                throw new InvalidOperationException($"VirtualQueryEx failed for 0x{current:X16}.");
+                throw new InvalidOperationException($"VirtualQuery failed for 0x{current:X16}. Win32 error: {Marshal.GetLastWin32Error()}.");
             }
 
             UInt64 regionStart = (UInt64)info.BaseAddress;
             UInt64 regionSize = unchecked((UInt64)info.RegionSize.ToInt64());
             UInt64 regionEnd = checked(regionStart + regionSize);
             if (regionSize == 0 || regionEnd <= current || info.State != 0x1000)
-                throw new InvalidOperationException($"VirtualQueryEx returned an invalid region for 0x{current:X16}.");
+                throw new InvalidOperationException($"VirtualQuery returned an invalid region for 0x{current:X16}.");
 
             UInt64 segmentEnd = Math.Min(pageEnd, regionEnd);
             regions.Add(new MemoryProtectionRegion
@@ -173,8 +172,7 @@ internal sealed unsafe class MemoryProtectionScope : IDisposable
     {
         if (PlatformInfo.IsWindows)
         {
-            NativeMethods.Win32MemoryPermissions ignored;
-            return NativeMethods.VirtualProtect((IntPtr)region.Address, checked((UInt32)region.Length), (NativeMethods.Win32MemoryPermissions)nativeProtection, &ignored);
+            return WindowsMemoryMethods.VirtualProtect((IntPtr)region.Address, checked((UIntPtr)region.Length), (NativeMethods.Win32MemoryPermissions)nativeProtection, out _);
         }
 
         return PosixNativeMethods.Protect((IntPtr)region.Address, (UIntPtr)region.Length, unchecked((Int32)nativeProtection));

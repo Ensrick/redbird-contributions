@@ -34,10 +34,16 @@ internal static class TrampolineBuilder
 
     /// <summary>Builds the trampoline for <paramref name="prologue"/>.</summary>
     /// <returns>The trampoline address, or <see cref="IntPtr.Zero"/> on failure.</returns>
-    public static IntPtr Build(PrologueSelection prologue, ILogger logger, out int trampolineSize, out InstructionPointerMap? instructionPointers)
+    public static IntPtr Build(
+        PrologueSelection prologue,
+        ILogger logger,
+        out int trampolineSize,
+        out InstructionPointerMap? instructionPointers,
+        out string? failureReason)
     {
         trampolineSize = 0;
         instructionPointers = null;
+        failureReason = null;
 
         UInt64 resumeAddress = prologue.FunctionAddress + (UInt64)prologue.Length;
 
@@ -50,23 +56,31 @@ internal static class TrampolineBuilder
 
         // Measure at a provisional address, then allocate exactly what is needed and encode again at the real one.
         if (!TryEncode(body, prologue.FunctionAddress, logger, out byte[] probe, out _))
+        {
+            failureReason = "the relocation sizing pass failed";
             return IntPtr.Zero;
+        }
 
         int reservation = probe.Length + SizeSlack;
         IntPtr trampoline = NativeMemoryManager.AllocateStub(prologue.FunctionAddress, reservation);
 
         if (trampoline == IntPtr.Zero)
         {
-            logger.LogError("No executable memory available within +/-2 GB of 0x{Address:X16}; relocating the prologue there would be unsafe.", prologue.FunctionAddress);
+            failureReason = NativeMemoryManager.LastAllocationFailure ?? $"no executable memory was available within relative-branch range of 0x{prologue.FunctionAddress:X16}";
+            logger.LogError("Could not allocate a trampoline near 0x{Address:X16}: {Reason}", prologue.FunctionAddress, failureReason);
 
             return IntPtr.Zero;
         }
 
         if (!TryEncode(body, (UInt64)trampoline, logger, out byte[] code, out uint[] newInstructionOffsets))
+        {
+            failureReason = $"the displaced instructions could not be relocated to 0x{(UInt64)trampoline:X16}";
             return IntPtr.Zero;
+        }
 
         if (code.Length > reservation)
         {
+            failureReason = $"the final trampoline grew from {probe.Length} to {code.Length} bytes";
             logger.LogError("Trampoline for 0x{Address:X16} grew from {Probe} to {Final} bytes between passes.", prologue.FunctionAddress, probe.Length, code.Length);
 
             return IntPtr.Zero;
@@ -74,6 +88,7 @@ internal static class TrampolineBuilder
 
         if (!NativeMemoryManager.WriteStub(trampoline, code))
         {
+            failureReason = $"the trampoline allocation at 0x{(UInt64)trampoline:X16} was not writable";
             logger.LogError("Could not write the trampoline for 0x{Address:X16}.", prologue.FunctionAddress);
             return IntPtr.Zero;
         }

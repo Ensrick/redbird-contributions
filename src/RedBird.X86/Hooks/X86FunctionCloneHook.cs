@@ -103,7 +103,7 @@ public sealed class X86FunctionCloneHook : IHook
             throw new ArgumentException("At least one patch must be supplied.", nameof(patches));
 
         _function = FunctionBoundary.Disassemble(functionAddress, scanOptions, _logger);
-        _logger.LogInformation("Disassembled {InstructionCount} x86 instructions ({ByteCount} bytes) from 0x{FunctionAddress:X8}.", _function.Instructions.Count, _function.ByteLength, functionAddress);
+        _logger.LogInformation("[{Name}] disassembled {InstructionCount} x86 instructions ({ByteCount} bytes) from 0x{FunctionAddress:X8}.", Name, _function.Instructions.Count, _function.ByteLength, functionAddress);
     }
 
     // -------------------------------------------------------------------------
@@ -312,7 +312,7 @@ public sealed class X86FunctionCloneHook : IHook
         }
 
         foreach (PatchSite site in _sites)
-            _logger.LogDebug("x86 island for 0x{OriginalIP:X8} at 0x{IslandAddress:X8} (suppress={SuppressOriginal}).", site.Instruction.IP, site.IslandRip, site.SuppressOriginal);
+            _logger.LogDebug("[{Name}] x86 island for 0x{OriginalIP:X8} at 0x{IslandAddress:X8} (suppress={SuppressOriginal}).", Name, site.Instruction.IP, site.IslandRip, site.SuppressOriginal);
 
         _logger.LogInformation("[{Name}] {SiteCount} patch islands assembled into {ByteCount} bytes at 0x{IslandAddress:X8}.", Name, _sites.Count, islands.Length, ToX86Address(_islandAddress));
     }
@@ -354,14 +354,14 @@ public sealed class X86FunctionCloneHook : IHook
             throw new InvalidOperationException($"Could not allocate {probe.Length + SizeSlack} bytes for the clone of 0x{_functionAddress:X8}.");
         }
 
-        _logger.LogDebug("Allocated x86 clone at 0x{CloneAddress:X8} ({Size} bytes).", ToX86Address(_cloneAddress), probe.Length + SizeSlack);
+        _logger.LogDebug("[{Name}] allocated x86 clone at 0x{CloneAddress:X8} ({Size} bytes).", Name, ToX86Address(_cloneAddress), probe.Length + SizeSlack);
 
         byte[] clone = Encode(body, ToX86Address(_cloneAddress));
 
         if (clone.Length > probe.Length + SizeSlack)
         {
             State = HookState.Failed;
-            _logger.LogWarning("x86 clone grew to {Actual} bytes beyond its {Reserved}-byte reservation.", clone.Length, probe.Length + SizeSlack);
+            _logger.LogWarning("[{Name}] x86 clone grew to {Actual} bytes beyond its {Reserved}-byte reservation.", Name, clone.Length, probe.Length + SizeSlack);
             throw new InvalidOperationException($"Clone of [{Name}] grew from {probe.Length} to {clone.Length} bytes between passes, exceeding the reservation.");
         }
 
@@ -371,7 +371,7 @@ public sealed class X86FunctionCloneHook : IHook
             throw new InvalidOperationException($"Could not write the clone body for [{Name}].");
         }
 
-        _logger.LogDebug("Wrote {Length} bytes of x86 clone code.", clone.Length);
+        _logger.LogDebug("[{Name}] wrote {Length} bytes of x86 clone code.", Name, clone.Length);
     }
 
     /// <summary>
@@ -413,7 +413,7 @@ public sealed class X86FunctionCloneHook : IHook
             throw new InvalidOperationException($"BlockEncoder failed for [{Name}] (function 0x{_functionAddress:X8}) at 0x{rip:X8}: {error}. This usually means a branch target inside the function lands outside the disassembled range: check for a jump table, or raise FunctionScanOptions.MaxBytes.");
         }
 
-        _logger.LogDebug("x86 BlockEncoder produced {ByteCount} bytes at 0x{CloneBase:X8}.", writer.Count, rip);
+        _logger.LogDebug("[{Name}] x86 BlockEncoder produced {ByteCount} bytes at 0x{CloneBase:X8}.", Name, writer.Count, rip);
         return writer.ToArray();
     }
 
@@ -439,7 +439,7 @@ public sealed class X86FunctionCloneHook : IHook
         CodePatch.Write(_functionAddress, X86JumpFactory.BuildDirect(_functionAddress, ToX86Address(_cloneAddress), _entryPatchLength));
 
         State = HookState.Installed;
-        _logger.LogInformation("Enabled x86 clone hook at 0x{FunctionAddress:X8}.", _functionAddress);
+        _logger.LogInformation("[{Name}] enabled x86 clone hook at 0x{FunctionAddress:X8}.", Name, _functionAddress);
     }
 
     /// <summary>
@@ -460,7 +460,7 @@ public sealed class X86FunctionCloneHook : IHook
         CodePatch.Write(_functionAddress, _entryBackup);
 
         State = HookState.Disabled;
-        _logger.LogInformation("Disabled x86 clone hook at 0x{FunctionAddress:X8}.", _functionAddress);
+        _logger.LogInformation("[{Name}] disabled x86 clone hook at 0x{FunctionAddress:X8}.", Name, _functionAddress);
     }
 
     // -------------------------------------------------------------------------

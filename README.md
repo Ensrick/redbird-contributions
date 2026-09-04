@@ -161,6 +161,35 @@ The factory wraps both the callback entry and `Original` trampoline path. See th
 [calling-convention guide](docs/articles/calling-conventions.md) for HVA annotations, supported
 returns, and ABI limitations.
 
+## Transaction and scanner conveniences
+
+Transactions return a fresh handle when a hook does not need a predeclared field. 
+This works for detours and context hooks; the transaction retains ownership, so the return value may be ignored:
+
+```csharp
+transaction.AddContextHook(
+    HookTarget.FromPattern("48 89 5C 24 ?? 57", offset: 6),
+    OnContext);
+```
+
+When a callback needs `Original`, initialize its persistent handle before registration. Export
+targets do not change that requirement:
+
+```csharp
+private readonly DetourHandle<LoadMapDelegate> loadMapHook = new();
+
+transaction.AddDetour(
+    loadMapHook,
+    HookTarget.FromExport("DLL_LoadMapToPlay", moduleHandle),
+    OnLoadMap);
+```
+
+Passing an uninitialized (`null`) handle fails during registration, before the export is resolved.
+If no persistent handle is needed, omit the first argument and keep the handle returned by the handle-less overload instead.
+
+`DataScanner.CurrentAddress` reports the absolute virtual address. `CurrentOffset` reports the signed byte offset from the associated `ScanRegion.BaseAddress`, which is useful when recording an RVA. 
+Check `Found` first because both a failed scan and a successful match at the region base report an offset of zero.
+
 ## Platform support
 
 | Feature | Windows X64 | Windows X86 | Linux X64 | Linux X86 |
@@ -184,6 +213,10 @@ The installed hook has no additional steady-state overhead from this mechanism.
 The selected signal remains reserved for the process lifetime. 
 If a peer thread blocks it, another component replaces its handler, thread enumeration fails, or all peers cannot be parked within five seconds, RedBird reports the failure without writing the patch. 
 Set `SuspendThreadsDuringPatch` to `false` only when the host provides its own safe point or when you accept the patching race.
+
+Unity Mono exposes `GC.TryStartNoGCRegion` on some profiles but throws `NotImplementedException` when it is called. 
+RedBird detects that unsupported capability and uses its allocation-free critical patch path without no-GC mode. 
+Runtimes which implement the API but cannot reserve the requested budget still fail before any peer thread is suspended.
 
 See [Getting started: configure safe patching](docs/articles/getting-started.md#configure-safe-patching) and the [native companion notes](src/RedBird.Core/native/linux-x64/README.md).
 

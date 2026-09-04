@@ -125,8 +125,7 @@ public sealed unsafe class StubAllocatorTests
     {
         Assert.SkipUnless(PlatformInfo.IsWindows, "The VirtualQuery fallback is Windows-specific.");
 
-        NativeMethods.Win32SystemInfo info = default;
-        NativeMethods.GetNativeSystemInfo(&info);
+        WindowsMemoryMethods.GetSystemInfo(out NativeMethods.Win32SystemInfo info);
 
         const UInt64 Reach = 0x7000_0000UL;
         const UInt64 Size = 64 * 1024;

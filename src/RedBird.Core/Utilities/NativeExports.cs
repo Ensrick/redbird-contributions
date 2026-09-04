@@ -13,7 +13,7 @@ public static class NativeExports
 {
     /// <summary>Resolves <paramref name="exportName"/> in the module loaded at <paramref name="module"/>.</summary>
     /// <returns>False when the module handle is null or the export does not exist.</returns>
-    public static unsafe bool TryResolve(IntPtr module, string exportName, out UInt64 address)
+    public static bool TryResolve(IntPtr module, string exportName, out UInt64 address)
     {
         address = 0;
 
@@ -22,23 +22,12 @@ public static class NativeExports
 
         if (PlatformInfo.IsWindows)
         {
-            IntPtr nameBuffer = IntPtr.Zero;
-            try
-            {
-                nameBuffer = Marshal.StringToHGlobalAnsi(exportName);
-                IntPtr resolved = NativeMethods.GetProcAddress(module, nameBuffer);
+            IntPtr resolved = WindowsMemoryMethods.GetProcAddress(module, exportName);
+            if (resolved == IntPtr.Zero)
+                return false;
 
-                if (resolved == IntPtr.Zero)
-                    return false;
-
-                address = (UInt64)resolved.ToInt64();
-                return true;
-            }
-            finally
-            {
-                if (nameBuffer != IntPtr.Zero)
-                    Marshal.FreeHGlobal(nameBuffer);
-            }
+            address = (UInt64)resolved.ToInt64();
+            return true;
         }
 
         if (ProcMaps.TryGetModulePath((UInt64)module.ToInt64(), out string path))

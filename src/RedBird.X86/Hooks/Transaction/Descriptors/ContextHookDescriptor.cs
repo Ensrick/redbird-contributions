@@ -23,7 +23,7 @@ internal sealed class ContextHookDescriptor(
 
         _hook = new X86InlineHook(address, options.HookSize, logger, Name);
 
-        ContextHookDelegate guarded = ContextStub.Guard(callback, options, address, logger);
+        ContextHookDelegate guarded = ContextStub.Guard(callback, options, address, logger, Name);
         _hook.Generate(ContextStub.CreateGenerator(_hook, guarded, options));
 
         Hook = _hook;

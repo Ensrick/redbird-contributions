@@ -23,11 +23,13 @@ public static class ContextStub
         ContextHookDelegate callback,
         ContextHookOptions options,
         UInt64 hookAddress,
-        ILogger logger)
+        ILogger logger,
+        string? name = null)
     {
         if (options.ErrorMode == CallbackErrorMode.Rethrow)
             return callback;
 
+        string displayName = name ?? $"0x{hookAddress:X16}";
         CallbackErrorMode mode = options.ErrorMode;
         Action<NativePointer<X64SmartCPUContext>, Exception>? recovery = options.RecoveryAction;
 
@@ -39,7 +41,7 @@ public static class ContextStub
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Unhandled exception in context hook callback at 0x{HookAddress:X16}. Registers keep their pre-callback values.", hookAddress);
+                logger.LogError(ex, "[{Name}] unhandled exception in context hook callback at 0x{HookAddress:X16}. Registers keep their pre-callback values.", displayName, hookAddress);
 
                 if (mode != CallbackErrorMode.LogAndContinueWithRecovery || recovery is null)
                     return;
@@ -51,7 +53,7 @@ public static class ContextStub
                 catch (Exception recoveryEx)
                 {
                     // A throwing recovery action must never reach native code either.
-                    logger.LogError(recoveryEx, "Exception in recovery action for context hook at 0x{HookAddress:X16}.", hookAddress);
+                    logger.LogError(recoveryEx, "[{Name}] exception in recovery action for context hook at 0x{HookAddress:X16}.", displayName, hookAddress);
                 }
             }
         };

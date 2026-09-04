@@ -86,7 +86,7 @@ public sealed class VirtualAllocManager : IMemoryManager
     {
         unsafe
         {
-            _baseAddress = NativeMethods.VirtualAlloc(IntPtr.Zero, checked((UIntPtr)size), NativeMethods.Win32AllocationType.MEM_RESERVE, permission);
+            _baseAddress = WindowsMemoryMethods.VirtualAlloc(IntPtr.Zero, checked((UIntPtr)size), NativeMethods.Win32AllocationType.MEM_RESERVE, permission);
         }
         if (_baseAddress == IntPtr.Zero)
         {
@@ -139,7 +139,7 @@ public sealed class VirtualAllocManager : IMemoryManager
                 // Commit the memory
                 unsafe
                 {
-                    if (NativeMethods.VirtualAlloc(block.Address, checked((UIntPtr)size), NativeMethods.Win32AllocationType.MEM_COMMIT, permission) == IntPtr.Zero)
+                    if (WindowsMemoryMethods.VirtualAlloc(block.Address, checked((UIntPtr)size), NativeMethods.Win32AllocationType.MEM_COMMIT, permission) == IntPtr.Zero)
                     {
                         // Allocation failed, revert the block state
                         block.IsFree = true;
@@ -194,7 +194,7 @@ public sealed class VirtualAllocManager : IMemoryManager
                 // Decommit the memory
                 unsafe
                 {
-                    NativeMethods.VirtualFree(block.Address, checked((UIntPtr)block.Size), (uint)NativeMethods.Win32AllocationType.MEM_DECOMMIT);
+                    WindowsMemoryMethods.VirtualFree(block.Address, checked((UIntPtr)block.Size), (uint)NativeMethods.Win32AllocationType.MEM_DECOMMIT);
                 }
 
                 // Attempt to merge with the next block
@@ -231,7 +231,7 @@ public sealed class VirtualAllocManager : IMemoryManager
         {
             unsafe
             {
-                NativeMethods.VirtualFree(_baseAddress, UIntPtr.Zero, (uint)NativeMethods.Win32AllocationType.MEM_RELEASE);
+                WindowsMemoryMethods.VirtualFree(_baseAddress, UIntPtr.Zero, (uint)NativeMethods.Win32AllocationType.MEM_RELEASE);
             }
         }
         GC.SuppressFinalize(this);

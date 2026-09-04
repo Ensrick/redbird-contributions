@@ -135,7 +135,7 @@ public sealed class HookTransaction : IDisposable
         [CallerArgumentExpression(nameof(handle))] string name = "")
         where TFunction : Delegate
     {
-        ArgumentNullThrow(handle, nameof(handle));
+        DetourHandleNullThrow(handle, name);
         ArgumentNullThrow(callback, nameof(callback));
 
         Register(new DetourDescriptor<TFunction>(name, target, handle, callback), handle, name);
@@ -161,7 +161,7 @@ public sealed class HookTransaction : IDisposable
         [CallerArgumentExpression(nameof(handle))] string name = "")
         where TFunction : Delegate
     {
-        ArgumentNullThrow(handle, nameof(handle));
+        DetourHandleNullThrow(handle, name);
         ArgumentNullThrow(callback, nameof(callback));
         ArgumentNullThrow(intermediaryFactory, nameof(intermediaryFactory));
 
@@ -450,5 +450,15 @@ public sealed class HookTransaction : IDisposable
     {
         if (value is null)
             throw new ArgumentNullException(parameterName);
+    }
+
+    private static void DetourHandleNullThrow<TFunction>(DetourHandle<TFunction>? handle, string expression)
+        where TFunction : Delegate
+    {
+        if (handle is not null)
+            return;
+
+        string field = string.IsNullOrWhiteSpace(expression) ? "the supplied handle" : $"[{expression}]";
+        throw new ArgumentNullException("handle", $"Detour handle {field} is null. Initialize the field with new DetourHandle<{typeof(TFunction).Name}>(), or call the overload which starts with HookTarget and use its returned handle. Registration validates the handle before resolving the target, so an export target has not been looked up yet.");
     }
 }

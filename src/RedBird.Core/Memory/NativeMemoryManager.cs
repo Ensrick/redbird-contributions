@@ -22,6 +22,12 @@ public static unsafe class NativeMemoryManager
     private static readonly object _slabLock = new();
     private static readonly List<StubSlab> _slabs = [];
 
+    [ThreadStatic]
+    private static string? _lastAllocationFailure;
+
+    /// <summary>The most recent proximity-allocation failure on this thread, for backend diagnostics.</summary>
+    internal static string? LastAllocationFailure => _lastAllocationFailure;
+
     private sealed class StubSlab(IntPtr baseAddress, bool isWriteExecute)
     {
         public IntPtr BaseAddress { get; } = baseAddress;
@@ -76,6 +82,8 @@ public static unsafe class NativeMemoryManager
 
     private static IntPtr AllocateStubCore(UInt64 targetAddress, int size, bool requireNear)
     {
+        _lastAllocationFailure = null;
+
         if (size <= 0)
             throw new ArgumentOutOfRangeException(nameof(size), "A stub must contain at least one byte.");
 
@@ -114,7 +122,10 @@ public static unsafe class NativeMemoryManager
             }
 
             if (slabAddress == IntPtr.Zero)
+            {
+                _lastAllocationFailure ??= requireNear ? $"No {SlabSize}-byte executable slab could be placed near 0x{targetAddress:X16}." : $"The operating system refused an unconstrained {SlabSize}-byte executable slab.";
                 return IntPtr.Zero;
+            }
 
             // Find out once, for the whole slab, whether this host tolerates write+execute.
             // The allocators ask for it, but a W^X policy can make PosixMap fall back to read-write.
@@ -123,6 +134,7 @@ public static unsafe class NativeMemoryManager
             if (!isWriteExecute && !Protect(slabAddress, SlabSize, MemoryProtection.ExecuteRead, out _))
             {
                 Free(slabAddress, SlabSize);
+                _lastAllocationFailure = $"A slab was allocated at 0x{(UInt64)slabAddress:X16}, but its protection could not be changed to executable.";
                 return IntPtr.Zero;
             }
 
@@ -225,7 +237,7 @@ public static unsafe class NativeMemoryManager
     {
         if (PlatformInfo.IsWindows)
         {
-            return NativeMethods.VirtualAlloc(IntPtr.Zero, (UIntPtr)size, NativeMethods.Win32AllocationType.MEM_COMMIT | NativeMethods.Win32AllocationType.MEM_RESERVE, (NativeMethods.Win32MemoryPermissions)MemoryProtectionConverter.ToWin32(protection));
+            return WindowsMemoryMethods.VirtualAlloc(IntPtr.Zero, (UIntPtr)size, NativeMethods.Win32AllocationType.MEM_COMMIT | NativeMethods.Win32AllocationType.MEM_RESERVE, (NativeMethods.Win32MemoryPermissions)MemoryProtectionConverter.ToWin32(protection));
         }
 
         return PosixMap(IntPtr.Zero, (UInt64)size, protection, fixedNoReplace: false);
@@ -239,7 +251,7 @@ public static unsafe class NativeMemoryManager
     public static bool Free(IntPtr address, int size)
     {
         if (PlatformInfo.IsWindows)
-            return NativeMethods.VirtualFree(address, UIntPtr.Zero, (uint)NativeMethods.Win32AllocationType.MEM_RELEASE);
+            return WindowsMemoryMethods.VirtualFree(address, UIntPtr.Zero, (uint)NativeMethods.Win32AllocationType.MEM_RELEASE);
 
         return PosixNativeMethods.Unmap(address, (UIntPtr)size);
     }
@@ -287,8 +299,7 @@ public static unsafe class NativeMemoryManager
 
         if (PlatformInfo.IsWindows)
         {
-            NativeMethods.Win32MemoryPermissions previous;
-            bool ok = NativeMethods.VirtualProtect(address, (uint)size, (NativeMethods.Win32MemoryPermissions)MemoryProtectionConverter.ToWin32(newProtection), &previous);
+            bool ok = WindowsMemoryMethods.VirtualProtect(address, (UIntPtr)size, (NativeMethods.Win32MemoryPermissions)MemoryProtectionConverter.ToWin32(newProtection), out NativeMethods.Win32MemoryPermissions previous);
             oldProtection = MemoryProtectionConverter.FromWin32((uint)previous);
             return ok;
         }
@@ -308,8 +319,7 @@ public static unsafe class NativeMemoryManager
     {
         if (PlatformInfo.IsWindows)
         {
-            NativeMethods.Win32MEMORY_BASIC_INFORMATION info = default;
-            if (NativeMethods.VirtualQueryEx(InstructionCache.CurrentProcessHandle, (IntPtr)address, &info, (uint)Marshal.SizeOf<NativeMethods.Win32MEMORY_BASIC_INFORMATION>()) != 0)
+            if (WindowsMemoryMethods.VirtualQuery((IntPtr)address, out NativeMethods.Win32MEMORY_BASIC_INFORMATION info, (UIntPtr)Marshal.SizeOf<NativeMethods.Win32MEMORY_BASIC_INFORMATION>()) != UIntPtr.Zero)
             {
                 return MemoryProtectionConverter.FromWin32(info.Protect);
             }
@@ -448,17 +458,21 @@ public static unsafe class NativeMemoryManager
         if (!wantsWriteAndExecute)
             return IntPtr.Zero;
 
-        // W^X policies reject PROT_WRITE|PROT_EXEC outright. Map writable; the caller flips it
-        // with FinalizeStub once the bytes are in place.
+        // W^X policies reject PROT_WRITE|PROT_EXEC outright. Map writable; the caller flips it with FinalizeStub once the bytes are in place.
         result = PosixNativeMethods.Map(address, (UIntPtr)size, MemoryProtectionConverter.ToPosix(MemoryProtection.ReadWrite), flags, -1, 0);
         return result == PosixNativeMethods.MAP_FAILED ? IntPtr.Zero : result;
     }
 
     private static UInt64 WindowsBoundAlloc(UInt64 low, UInt64 high, UInt64 size, MemoryProtection protection)
     {
-        NativeMethods.Win32SystemInfo info = default;
-        NativeMethods.GetNativeSystemInfo(&info);
+        WindowsMemoryMethods.GetSystemInfo(out NativeMethods.Win32SystemInfo info);
         UInt64 granularity = info.dwAllocationGranularity;
+
+        if (granularity == 0)
+        {
+            _lastAllocationFailure = "GetSystemInfo returned an allocation granularity of zero.";
+            return 0;
+        }
 
         UInt64 applicationMin = (UInt64)info.lpMinimumApplicationAddress;
         UInt64 applicationMax = (UInt64)info.lpMaximumApplicationAddress;
@@ -467,26 +481,39 @@ public static unsafe class NativeMemoryManager
         high = Math.Min(high & ~(granularity - 1), applicationMax & ~(granularity - 1));
 
         if (low >= high || size > high - low)
+        {
+            _lastAllocationFailure = $"The requested Windows proximity window is empty after clamping: [0x{low:X16}, 0x{high:X16}).";
             return 0;
+        }
 
-        UInt64 viaVirtualAlloc2 = TryVirtualAlloc2(low, high, size, protection);
+        UInt64 viaVirtualAlloc2 = TryVirtualAlloc2(low, high, size, protection, out string? virtualAlloc2Failure);
         if (viaVirtualAlloc2 != 0)
         {
             if (IsWithin(viaVirtualAlloc2, low, high, size))
                 return viaVirtualAlloc2;
 
             // Defensive only: the address-requirements contract should make this impossible.
-            NativeMethods.VirtualFree((IntPtr)viaVirtualAlloc2, UIntPtr.Zero, (uint)NativeMethods.Win32AllocationType.MEM_RELEASE);
+            WindowsMemoryMethods.VirtualFree((IntPtr)viaVirtualAlloc2, UIntPtr.Zero, (uint)NativeMethods.Win32AllocationType.MEM_RELEASE);
         }
 
         // VirtualAlloc2 can fail in a fragmented process even when a suitable hole exists.
         // Keep the explicit region walk from the pre-refactor allocator as the reliable fallback.
-        return WindowsBoundAllocFallback(low, high, size, protection, granularity);
+        UInt64 fallback = WindowsBoundAllocFallback(low, high, size, protection, granularity);
+        if (fallback == 0)
+        {
+            string suffix = string.IsNullOrEmpty(virtualAlloc2Failure)
+                ? string.Empty
+                : $" VirtualAlloc2: {virtualAlloc2Failure}";
+            _lastAllocationFailure = $"Windows could not reserve {size} bytes inside [0x{low:X16}, 0x{high:X16}); the VirtualQuery/VirtualAlloc fallback was exhausted.{suffix}";
+        }
+
+        return fallback;
     }
 
     /// <summary>
-    /// Walks the current process address space and tries every allocation-granularity-aligned free range inside <c>[low, high)</c>. 
-    /// Kept separate so the fallback can be regression-tested independently of VirtualAlloc2.
+    /// Walks the current process address space and tries every allocation-granularity-aligned
+    /// free range inside <c>[low, high)</c>. Kept separate so the fallback can be regression-tested
+    /// independently of VirtualAlloc2.
     /// </summary>
     internal static UInt64 WindowsBoundAllocFallback(
         UInt64 low,
@@ -501,12 +528,11 @@ public static unsafe class NativeMemoryManager
             return 0;
 
         UInt64 current = low;
-        NativeMethods.Win32MEMORY_BASIC_INFORMATION mbi = default;
-
         while (current < high && size <= high - current)
         {
-            if (NativeMethods.VirtualQueryEx(InstructionCache.CurrentProcessHandle, (IntPtr)current, &mbi, (uint)Marshal.SizeOf<NativeMethods.Win32MEMORY_BASIC_INFORMATION>()) == 0)
+            if (WindowsMemoryMethods.VirtualQuery((IntPtr)current, out NativeMethods.Win32MEMORY_BASIC_INFORMATION mbi, (UIntPtr)Marshal.SizeOf<NativeMethods.Win32MEMORY_BASIC_INFORMATION>()) == UIntPtr.Zero)
             {
+                _lastAllocationFailure = $"VirtualQuery failed at 0x{current:X16} with Win32 error {Marshal.GetLastWin32Error()}.";
                 break;
             }
 
@@ -519,14 +545,12 @@ public static unsafe class NativeMemoryManager
 
             if (mbi.State == (uint)NativeMethods.Win32AllocationType.MEM_FREE)
             {
-                // VirtualQuery returns the base of the containing region, which may be below the requested lower bound. The refactor accidentally aligned regionBase alone,
-                // allowing allocations outside the +/-2 GB window on fragmented processes.
                 UInt64 candidate = AlignUp(Math.Max(current, regionBase), granularity);
                 UInt64 candidateLimit = Math.Min(regionEnd, high);
 
                 if (candidate >= low && candidate <= candidateLimit && size <= candidateLimit - candidate)
                 {
-                    IntPtr allocated = NativeMethods.VirtualAlloc((IntPtr)candidate, (UIntPtr)size, NativeMethods.Win32AllocationType.MEM_COMMIT | NativeMethods.Win32AllocationType.MEM_RESERVE, (NativeMethods.Win32MemoryPermissions)MemoryProtectionConverter.ToWin32(protection));
+                    IntPtr allocated = WindowsMemoryMethods.VirtualAlloc((IntPtr)candidate, (UIntPtr)size, NativeMethods.Win32AllocationType.MEM_COMMIT | NativeMethods.Win32AllocationType.MEM_RESERVE, (NativeMethods.Win32MemoryPermissions)MemoryProtectionConverter.ToWin32(protection));
                     if (allocated != IntPtr.Zero && IsWithin((UInt64)allocated, low, high, size))
                         return (UInt64)allocated;
 
@@ -548,13 +572,12 @@ public static unsafe class NativeMemoryManager
         return 0;
     }
 
-    private static UInt64 TryVirtualAlloc2(UInt64 low, UInt64 high, UInt64 size, MemoryProtection protection)
+    private static UInt64 TryVirtualAlloc2(UInt64 low, UInt64 high, UInt64 size, MemoryProtection protection, out string? failure)
     {
+        failure = null;
+
         try
         {
-            if (NativeMethods.VirtualAlloc2 == null)
-                return 0;
-
             NativeMethods.Win32MEM_ADDRESS_REQUIREMENTS requirements = new()
             {
                 LowestStartingAddress = (IntPtr)low,
@@ -568,13 +591,22 @@ public static unsafe class NativeMemoryManager
             };
             parameter.Value.Pointer = (IntPtr)(&requirements);
 
-            // A null process handle is the documented current-process form and matches the allocator used before the refactor.
-            IntPtr result = NativeMethods.VirtualAlloc2(IntPtr.Zero, IntPtr.Zero, (UIntPtr)size, NativeMethods.Win32AllocationType.MEM_COMMIT | NativeMethods.Win32AllocationType.MEM_RESERVE, (NativeMethods.Win32MemoryPermissions)MemoryProtectionConverter.ToWin32(protection), &parameter, 1);
+            // A null process handle is the documented current-process form and matches the
+            // allocator used before the refactor.
+            IntPtr result = WindowsMemoryMethods.VirtualAlloc2(IntPtr.Zero, IntPtr.Zero, (UIntPtr)size, NativeMethods.Win32AllocationType.MEM_COMMIT | NativeMethods.Win32AllocationType.MEM_RESERVE, (NativeMethods.Win32MemoryPermissions)MemoryProtectionConverter.ToWin32(protection), &parameter, 1);
+            if (result == IntPtr.Zero)
+                failure = $"failed with Win32 error {Marshal.GetLastWin32Error()}.";
+
             return (UInt64)result;
         }
-        catch
+        catch (EntryPointNotFoundException)
         {
-            // VirtualAlloc2 is Windows 10+; older hosts fall through to the VirtualQuery walk.
+            failure = "is unavailable on this Windows version.";
+            return 0;
+        }
+        catch (DllNotFoundException)
+        {
+            failure = "kernel32.dll could not be loaded.";
             return 0;
         }
     }

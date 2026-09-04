@@ -50,6 +50,30 @@ CommitResult result = transaction.Commit();
 The handle exposes `Original` after commit. 
 Disposal restores installed hooks newest-first.
 
+When a caller does not need a long-lived field, `AddDetour` and `AddContextHook` also have overloads that allocate and return a fresh handle. 
+The transaction still owns the hook, so the return value can
+be ignored when no individual control or status inspection is needed.
+
+For lower-level scans, `DataScanner.CurrentAddress` is the resolved virtual address and
+`DataScanner.CurrentOffset` is its signed byte offset from `ScanRegion.BaseAddress`.
+
+### Export targets and handles
+
+On Windows, the module argument to `HookTarget.FromExport` is an `HMODULE` (the module base address returned by the loader). 
+A transaction uses its scan region's module when the argument is omitted.
+
+```csharp
+private readonly DetourHandle<LoadMapDelegate> loadMapHook = new();
+
+transaction.AddDetour(
+    loadMapHook,
+    HookTarget.FromExport("DLL_LoadMapToPlay", moduleHandle),
+    OnLoadMap);
+```
+
+The explicit-handle overload requires an initialized handle. 
+Use `new DetourHandle<TDelegate>()`, as above, or use the overload beginning with `HookTarget` and retain its returned handle.
+
 ## Chaining
 
 The native engines layer patches and require reverse-order removal by default.

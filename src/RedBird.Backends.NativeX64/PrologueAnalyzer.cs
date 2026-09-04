@@ -212,13 +212,25 @@ internal static unsafe class PrologueAnalyzer
     private static Dictionary<UInt64, List<Instruction>> BuildBranchMap(List<Instruction> instructions)
     {
         Dictionary<UInt64, List<Instruction>> map = [];
+        UInt64 functionAddress = instructions.Count == 0 ? 0 : instructions[0].IP;
 
         foreach (Instruction instruction in instructions)
         {
+            bool isBranch = instruction.FlowControl is FlowControl.ConditionalBranch or FlowControl.UnconditionalBranch;
+            bool isDirectCall = instruction.FlowControl == FlowControl.Call;
+            if (!isBranch && !isDirectCall)
+                continue;
+
             if (instruction.Op0Kind is not (OpKind.NearBranch16 or OpKind.NearBranch32 or OpKind.NearBranch64))
                 continue;
 
             UInt64 target = instruction.NearBranchTarget;
+
+            // A recursive call to the function entry is supposed to pass through the detour.
+            // It must not make the selector displace the entire function.
+            // Calls to an internal label inside the prefix remain tracked because they really would otherwise land in the middle of the installed patch.
+            if (isDirectCall && target == functionAddress)
+                continue;
 
             if (!map.TryGetValue(target, out List<Instruction>? sources))
                 map[target] = sources = [];
@@ -252,7 +264,9 @@ internal static unsafe class PrologueAnalyzer
             instructions.Add(instruction);
             consumed += instruction.Length;
 
-            if (instruction.Op0Kind is OpKind.NearBranch16 or OpKind.NearBranch32 or OpKind.NearBranch64)
+            // A nearby call target is a different function, not a forward path in this one.
+            if ((instruction.FlowControl is FlowControl.ConditionalBranch or FlowControl.UnconditionalBranch) &&
+                (instruction.Op0Kind is OpKind.NearBranch16 or OpKind.NearBranch32 or OpKind.NearBranch64))
             {
                 UInt64 target = instruction.NearBranchTarget;
                 if (target > furthestTarget && target > address && target < ceiling)

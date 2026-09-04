@@ -74,15 +74,7 @@ internal static unsafe class ThreadPatchScope
             handles = [.. OpenPeerThreads()];
             IntPtr[] suspendedHandles = new IntPtr[handles.Length];
 
-            if (GCSettings.LatencyMode != GCLatencyMode.NoGCRegion)
-            {
-                if (!GC.TryStartNoGCRegion(NoGcBudget))
-                {
-                    throw new InvalidOperationException("Could not enter a no-GC region before suspending peer threads.");
-                }
-
-                ownsNoGcRegion = true;
-            }
+            ownsNoGcRegion = TryEnterNoGcRegionForPatch();
 
             fixed (IntPtr* handlePointer = handles)
             fixed (IntPtr* suspendedPointer = suspendedHandles)
@@ -135,13 +127,7 @@ internal static unsafe class ThreadPatchScope
         {
             MemoryProtectionRegion[] protectionRegions = MemoryProtectionScope.CaptureRegions((IntPtr)patchAddress, patchBytes.Length);
 
-            if (GCSettings.LatencyMode != GCLatencyMode.NoGCRegion)
-            {
-                if (!GC.TryStartNoGCRegion(NoGcBudget))
-                    throw new InvalidOperationException("Could not enter a no-GC region before suspending peer threads.");
-
-                ownsNoGcRegion = true;
-            }
+            ownsNoGcRegion = TryEnterNoGcRegionForPatch();
 
             fixed (UInt64* sourcePointer = map.SourceInstructionPointers)
             fixed (UInt64* relocatedPointer = map.RelocatedInstructionPointers)
@@ -488,6 +474,37 @@ internal static unsafe class ThreadPatchScope
         {
             // The runtime ends no-GC mode itself if its budget is exceeded. All peers have already
             // been resumed, so cleanup must not make a successfully applied patch look uninstalled.
+        }
+    }
+
+    /// <summary>
+    /// Enters no-GC mode when the runtime implements it. Unity's Mono exposes the API but throws <see cref="NotImplementedException"/>; in that case the allocation-free critical patch
+    /// routine remains usable and the operation proceeds without claiming to own a no-GC region.
+    /// </summary>
+    /// <remarks>
+    /// A normal <see langword="false"/> result is still a hard failure: that means the runtime implements no-GC regions but could not reserve the requested budget. 
+    /// Only runtimes which explicitly report the feature as unsupported take the compatibility path.
+    /// </remarks>
+    internal static bool TryEnterNoGcRegionForPatch(Func<long, bool>? tryStart = null)
+    {
+        try
+        {
+            if (GCSettings.LatencyMode == GCLatencyMode.NoGCRegion)
+                return false;
+
+            bool started = tryStart is null ? GC.TryStartNoGCRegion(NoGcBudget) : tryStart(NoGcBudget);
+            if (!started)
+                throw new InvalidOperationException("Could not enter a no-GC region before suspending peer threads.");
+
+            return true;
+        }
+        catch (NotImplementedException)
+        {
+            return false;
+        }
+        catch (PlatformNotSupportedException)
+        {
+            return false;
         }
     }
 

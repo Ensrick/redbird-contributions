@@ -83,7 +83,7 @@ public sealed class X86InlineHook : IHook
 
         CodePatch.Write(_targetAddress, X86JumpFactory.BuildDirect(_targetAddress, unchecked((UInt32)_stubAddress.ToInt32()), _displacedByteCount));
         State = HookState.Installed;
-        _logger.LogDebug("Enabled x86 inline hook at 0x{Target:X8} via 0x{Stub:X8}.", _targetAddress, _stubAddress.ToInt64());
+        _logger.LogDebug("[{Name}] enabled x86 inline hook at 0x{Target:X8} via 0x{Stub:X8}.", Name, _targetAddress, _stubAddress.ToInt64());
     }
 
     public void Disable()

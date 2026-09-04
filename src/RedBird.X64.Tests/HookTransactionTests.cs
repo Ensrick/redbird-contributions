@@ -213,6 +213,24 @@ public sealed class HookTransactionTests
     }
 
     [Fact]
+    public void Register_NullDetourHandleExplainsThatTargetResolutionHasNotRun()
+    {
+        using ExecutableFunction target = TestFunctions.Add();
+        using HookTransaction tx = Transaction(target);
+
+        DetourHandle<TestDelegates.BinaryInt> missingHandle = null!;
+        ArgumentNullException exception = Assert.Throws<ArgumentNullException>(() =>
+            tx.AddDetour(
+                missingHandle,
+                HookTarget.FromExport("AnExportWhichMustNotBeResolved", (IntPtr)target.Address),
+                (a, b) => 0));
+
+        Assert.Equal("handle", exception.ParamName);
+        Assert.Contains("Initialize the field", exception.Message, StringComparison.Ordinal);
+        Assert.Contains("has not been looked up yet", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Session_CommitsSeveralTransactionsInOneSweep()
     {
         using ExecutableFunction first = TestFunctions.Constant(1);

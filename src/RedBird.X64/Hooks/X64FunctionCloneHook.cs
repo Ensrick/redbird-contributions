@@ -99,7 +99,7 @@ public sealed class X64FunctionCloneHook : IHook
             throw new ArgumentException("At least one patch must be supplied.", nameof(patches));
 
         _function = FunctionBoundary.Disassemble(functionAddress, scanOptions, _logger);
-        _logger.CloneHookDisassembledInstructions(_function.Instructions.Count, _function.ByteLength, functionAddress);
+        _logger.CloneHookDisassembledInstructions(Name, _function.Instructions.Count, _function.ByteLength, functionAddress);
     }
 
     // -------------------------------------------------------------------------
@@ -305,7 +305,7 @@ public sealed class X64FunctionCloneHook : IHook
         }
 
         foreach (PatchSite site in _sites)
-            _logger.CloneHookPatchIslandCreated(site.Instruction.IP, (IntPtr)site.IslandRip, islands.Length, site.SuppressOriginal);
+            _logger.CloneHookPatchIslandCreated(Name, site.Instruction.IP, site.IslandRip, islands.Length, site.SuppressOriginal);
 
         _logger.LogInformation("[{Name}] {SiteCount} patch islands assembled into {ByteCount} bytes at 0x{IslandAddress:X16}.", Name, _sites.Count, islands.Length, (UInt64)_islandAddress);
     }
@@ -347,14 +347,14 @@ public sealed class X64FunctionCloneHook : IHook
             throw new InvalidOperationException($"Could not allocate {probe.Length + SizeSlack} bytes for the clone of 0x{_functionAddress:X16}.");
         }
 
-        _logger.CloneStubAllocated(_cloneAddress, probe.Length + SizeSlack, _functionAddress);
+        _logger.CloneStubAllocated(Name, (UInt64)_cloneAddress, probe.Length + SizeSlack, _functionAddress);
 
         byte[] clone = Encode(body, (UInt64)_cloneAddress);
 
         if (clone.Length > probe.Length + SizeSlack)
         {
             State = HookState.Failed;
-            _logger.CloneStubExceeded(clone.Length, probe.Length + SizeSlack);
+            _logger.CloneStubExceeded(Name, clone.Length, probe.Length + SizeSlack);
             throw new InvalidOperationException($"Clone of [{Name}] grew from {probe.Length} to {clone.Length} bytes between passes, exceeding the reservation.");
         }
 
@@ -364,7 +364,7 @@ public sealed class X64FunctionCloneHook : IHook
             throw new InvalidOperationException($"Could not write the clone body for [{Name}].");
         }
 
-        _logger.CloneStubWritten(clone.Length);
+        _logger.CloneStubWritten(Name, clone.Length);
     }
 
     /// <summary>
@@ -406,7 +406,7 @@ public sealed class X64FunctionCloneHook : IHook
             throw new InvalidOperationException($"BlockEncoder failed for [{Name}] (function 0x{_functionAddress:X16}) at 0x{rip:X16}: {error}. This usually means a branch target inside the function lands outside the disassembled range: check for a jump table, or raise FunctionScanOptions.MaxBytes.");
         }
 
-        _logger.CloneHookBlockEncoderResult(writer.Count, rip);
+        _logger.CloneHookBlockEncoderResult(Name, writer.Count, rip);
         return writer.ToArray();
     }
 
@@ -431,7 +431,7 @@ public sealed class X64FunctionCloneHook : IHook
         CodePatch.Write(_functionAddress, CodePatch.BuildAbsoluteJump((UInt64)_cloneAddress, _entryPatchLength));
 
         State = HookState.Installed;
-        _logger.CloneHookEnabled(_functionAddress, _cloneAddress);
+        _logger.CloneHookEnabled(Name, _functionAddress, (UInt64)_cloneAddress);
     }
 
     /// <summary>
@@ -451,7 +451,7 @@ public sealed class X64FunctionCloneHook : IHook
         CodePatch.Write(_functionAddress, _entryBackup);
 
         State = HookState.Disabled;
-        _logger.CloneHookDisabled(_functionAddress);
+        _logger.CloneHookDisabled(Name, _functionAddress);
     }
 
     // -------------------------------------------------------------------------

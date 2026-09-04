@@ -1,9 +1,11 @@
-﻿using System;
-using System.Runtime.InteropServices;
-using Xunit;
+﻿using Iced.Intel;
 using RedBird.Abstractions.Hooks;
 using RedBird.Backends.NativeX64;
 using RedBird.X64.Tests.Infrastructure;
+using System;
+using System.Runtime.InteropServices;
+using static Iced.Intel.AssemblerRegisters;
+using Xunit;
 
 namespace RedBird.X64.Tests;
 
@@ -151,6 +153,74 @@ public sealed unsafe class NativeDetourTests
         Assert.NotEqual(IntPtr.Zero, detour.TrampolineAddress);
     }
 
+    [Fact]
+    public void ForwardCall_DoesNotMergeTheCalleeIntoPrologueAnalysis()
+    {
+        using ExecutableFunction target = ExecutableFunction.Create(static assembler =>
+        {
+            Label entry = assembler.CreateLabel();
+            Label nearbyCallee = assembler.CreateLabel();
+
+            assembler.Label(ref entry);
+            assembler.db(new byte[]
+            {
+                0x48, 0x89, 0x5C, 0x24, 0x08,
+                0x57,
+            });
+            assembler.call(nearbyCallee);
+            assembler.pop(rdi);
+            assembler.ret();
+
+            for (int i = 0; i < 16; i++)
+                assembler.nop();
+
+            assembler.Label(ref nearbyCallee);
+            assembler.call(entry);
+            assembler.ret();
+        });
+
+        NativeDetourBackend backend = Backend(new NativeDetourOptions
+        {
+            AllowedSchemes = DetourScheme.Indirect,
+        });
+
+        using NativeDetour<TestDelegates.NullaryInt> detour =
+            Detour<TestDelegates.NullaryInt>(backend, target.Address, () => 0, "forward-call");
+
+        // Only the six-byte compiler prefix is needed. Before the fix, the forward call caused
+        // the analyzer to scan past the caller's ret and a call in the callee widened this to an
+        // impossible cross-function prologue.
+        Assert.Equal(6, detour.DisplacedByteCount);
+    }
+
+    [Fact]
+    public void RecursiveCallToEntry_DoesNotWidenTheDisplacedPrologue()
+    {
+        using ExecutableFunction target = ExecutableFunction.Create(static assembler =>
+        {
+            Label entry = assembler.CreateLabel();
+            assembler.Label(ref entry);
+            assembler.db(new byte[]
+            {
+                0x48, 0x89, 0x5C, 0x24, 0x08,
+                0x57,
+            });
+            assembler.call(entry);
+            assembler.pop(rdi);
+            assembler.ret();
+        });
+
+        NativeDetourBackend backend = Backend(new NativeDetourOptions
+        {
+            AllowedSchemes = DetourScheme.Indirect,
+        });
+
+        using NativeDetour<TestDelegates.NullaryInt> detour =
+            Detour<TestDelegates.NullaryInt>(backend, target.Address, () => 0, "recursive-call");
+
+        Assert.Equal(6, detour.DisplacedByteCount);
+    }
+
     // -------------------------------------------------------------------------
     // Thunks
     // -------------------------------------------------------------------------
@@ -217,6 +287,21 @@ public sealed unsafe class NativeDetourTests
                 TargetAddress = target.Address,
                 Callback = null!,
             }));
+    }
+
+    [Fact]
+    public void PreparationFailure_ReportsPerSchemeAttempts()
+    {
+        using ExecutableFunction target = TestFunctions.Add();
+        NativeDetourBackend backend = Backend(new NativeDetourOptions
+        {
+            AllowedSchemes = DetourScheme.None,
+        });
+
+        NotSupportedException exception = Assert.Throws<NotSupportedException>(() =>
+            Detour<TestDelegates.BinaryInt>(backend, target.Address, (a, b) => 0, "no-schemes"));
+
+        Assert.Contains("No schemes were enabled", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

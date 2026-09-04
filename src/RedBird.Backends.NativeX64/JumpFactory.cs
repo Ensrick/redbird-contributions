@@ -27,11 +27,16 @@ internal static unsafe class JumpFactory
     /// Produces the patch for <paramref name="scheme"/>, allocating a pointer slot if the scheme needs one.
     /// </summary>
     /// <returns>Null when the scheme cannot be satisfied here, typically no memory within reach.</returns>
-    public static DetourPatch? TryBuild(DetourScheme scheme, UInt64 functionAddress, UInt64 callbackAddress)
+    public static DetourPatch? TryBuild(
+        DetourScheme scheme,
+        UInt64 functionAddress,
+        UInt64 callbackAddress,
+        out string? failureReason)
     {
-        return scheme switch
+        failureReason = null;
+        DetourPatch? patch = scheme switch
         {
-            DetourScheme.Indirect => BuildIndirect(functionAddress, callbackAddress),
+            DetourScheme.Indirect => BuildIndirect(functionAddress, callbackAddress, out failureReason),
             DetourScheme.Absolute => BuildAbsolute(callbackAddress),
             DetourScheme.PushRet => BuildAssembled(scheme, functionAddress, a =>
             {
@@ -51,26 +56,41 @@ internal static unsafe class JumpFactory
             }),
             _ => null,
         };
+
+        if (patch is null && failureReason is null)
+            failureReason = $"the {scheme} entry jump could not be encoded at 0x{functionAddress:X16}";
+
+        return patch;
     }
 
     /// <summary>
     /// <c>jmp qword ptr [rip+disp32]</c> with the destination in a slot allocated near the target.
     /// </summary>
-    private static DetourPatch? BuildIndirect(UInt64 functionAddress, UInt64 callbackAddress)
+    private static DetourPatch? BuildIndirect(UInt64 functionAddress, UInt64 callbackAddress, out string? failureReason)
     {
+        failureReason = null;
         IntPtr slot = NativeMemoryManager.AllocateStub(functionAddress, sizeof(UInt64));
         if (slot == IntPtr.Zero)
+        {
+            failureReason = NativeMemoryManager.LastAllocationFailure ?? "no nearby pointer slot was available";
             return null;
+        }
 
         // Check the range before writing anything, so a rejected scheme leaves no half-built slot.
         // The rel32 is measured from the end of the 6-byte instruction.
         Int64 delta = (Int64)(UInt64)slot - (Int64)(functionAddress + 6);
         if (delta < Int32.MinValue || delta > Int32.MaxValue)
+        {
+            failureReason = $"the pointer slot at 0x{(UInt64)slot:X16} is outside rel32 range";
             return null;
+        }
 
         // Not a direct store: the slab may be mapped execute-read, and on a second detour it is also a page some other stub already lives on.
         if (!NativeMemoryManager.WriteStub(slot, callbackAddress))
+        {
+            failureReason = $"the pointer slot at 0x{(UInt64)slot:X16} was not writable";
             return null;
+        }
 
         byte[] bytes = new byte[6];
         bytes[0] = 0xFF;
