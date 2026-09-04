@@ -19,9 +19,22 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="runtimes\linux-x64\native\libredbird_thread_patch.so"
+  <!--
+    Replace the SDK's automatically discovered None item with an explicit package item.
+
+    Remove prevents the same file from being included twice. 
+    Include adds it back only after the native Linux helper has been built. 
+    Pack places the library in NuGet's standard Linux x64 native-runtime directory, allowing consuming projects to resolve it as a runtime asset.
+
+    CopyToOutputDirectory and CopyToPublishDirectory also place the library alongside RedBird.Core.dll during local builds and publishing. 
+    PreserveNewest avoids copying it again when the destination is already current. 
+    Link and TargetPath give the copied output the simple filename "libredbird_thread_patch.so".
+  -->
+    <None Remove="runtimes/linux-x64/native/libredbird_thread_patch.so" />
+    <None Include="runtimes/linux-x64/native/libredbird_thread_patch.so"
+          Condition="Exists('runtimes/linux-x64/native/libredbird_thread_patch.so')"
           Pack="True"
-          PackagePath="runtimes/linux-x64/native/"
+          PackagePath="runtimes/linux-x64/native/libredbird_thread_patch.so"
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest"
           Link="libredbird_thread_patch.so"
