@@ -384,28 +384,51 @@ public static unsafe class NativeMemoryManager
     /// <summary>
     /// Places a mapping inside <c>[low, high)</c> on POSIX.
     /// <para>
-    /// <c>mmap</c>'s address argument is only a hint the kernel may ignore, so this walks <c>/proc/self/maps</c> for a hole and asks for it with <c>MAP_FIXED_NOREPLACE</c>, which
-    /// fails rather than relocating if the hole was taken in the meantime. Where the map is not readable (macOS) it degrades to hint-and-verify, discarding anything that lands outside the window.
+    /// First asks the kernel for a mapping near the centre of the window and verifies the result.
+    /// If that hint lands outside the window, Linux walks <c>/proc/self/maps</c> for holes and tries
+    /// them with <c>MAP_FIXED_NOREPLACE</c>, which fails rather than replacing a racing mapping.
     /// </para>
     /// </summary>
     private static UInt64 PosixBoundAlloc(UInt64 low, UInt64 high, UInt64 size, MemoryProtection protection)
     {
         UInt64 pageSize = (UInt64)PlatformInfo.PageSize;
-        low = (low + pageSize - 1) & ~(pageSize - 1);
+        low = AlignUp(low, pageSize);
         high &= ~(pageSize - 1);
 
         if (low >= high || high - low < size)
+        {
+            _lastAllocationFailure = $"The requested POSIX proximity window is empty after page alignment: [0x{low:X16}, 0x{high:X16}).";
             return 0;
+        }
+
+        // A non-fixed mmap hint is safe: the kernel may move it, but it never replaces an existing mapping.
+        // Try the centre of the allowed window first and verify the returned address.
+        // This is important in managed/container processes where a /proc gap can race another runtime thread, or a security policy can reject MAP_FIXED_NOREPLACE while allowing an
+        // ordinary mapping that still lands comfortably inside rel32 range.
+        UInt64 hintAddress = (low + ((high - low) / 2)) & ~(pageSize - 1);
+        if (hintAddress > high - size)
+            hintAddress = (high - size) & ~(pageSize - 1);
+
+        IntPtr hinted = PosixMap((IntPtr)hintAddress, size, protection, fixedNoReplace: false);
+        if (hinted != IntPtr.Zero)
+        {
+            if (IsWithin((UInt64)hinted, low, high, size))
+                return (UInt64)hinted;
+
+            PosixNativeMethods.Unmap(hinted, (UIntPtr)size);
+        }
 
         if (ProcMaps.IsAvailable)
         {
             UInt64 cursor = low;
+            int attempts = 0;
 
-            for (int attempt = 0; attempt < MaxPlacementAttempts; attempt++)
+            while (attempts < MaxPlacementAttempts)
             {
                 if (!ProcMaps.TryFindFreeGap(cursor, high, size, pageSize, out UInt64 candidate))
                     break;
 
+                attempts++;
                 IntPtr result = PosixMap((IntPtr)candidate, size, protection, fixedNoReplace: true);
                 if (result != IntPtr.Zero && IsWithin((UInt64)result, low, high, size))
                     return (UInt64)result;
@@ -419,17 +442,11 @@ public static unsafe class NativeMemoryManager
                     break;
             }
 
+            _lastAllocationFailure = $"POSIX could not map {size} bytes inside [0x{low:X16}, 0x{high:X16}); the kernel hint landed outside the window and {attempts} exact placement attempt(s) were exhausted.";
             return 0;
         }
 
-        IntPtr hinted = PosixMap((IntPtr)(low + (high - low) / 2), size, protection, fixedNoReplace: false);
-        if (hinted == IntPtr.Zero)
-            return 0;
-
-        if (IsWithin((UInt64)hinted, low, high, size))
-            return (UInt64)hinted;
-
-        PosixNativeMethods.Unmap(hinted, (UIntPtr)size);
+        _lastAllocationFailure = $"POSIX could not map {size} bytes inside [0x{low:X16}, 0x{high:X16}); the kernel ignored or refused the in-range hint and /proc/self/maps is unavailable for exact placement.";
         return 0;
     }
 
