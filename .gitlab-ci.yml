@@ -51,6 +51,8 @@ cache:
 validate:config:
   stage: validate
   image: node:22.22.2-bookworm
+  tags:
+    - docker-linux
   variables:
     # Keep npm's download cache inside the project so GitLab can preserve it between pipelines.
     NPM_CONFIG_CACHE: "$CI_PROJECT_DIR/.npm"
@@ -72,6 +74,8 @@ validate:config:
 build:
   stage: validate
   image: mcr.microsoft.com/dotnet/sdk:10.0
+  tags:
+    - docker-linux
   script:
     - dotnet restore RedBird.slnx
     - dotnet build RedBird.slnx -c Release --no-restore -p:ContinuousIntegrationBuild=true
@@ -113,6 +117,8 @@ test:x86:
 test:linux-x64:
   stage: test
   image: mcr.microsoft.com/dotnet/sdk:10.0
+  tags:
+    - docker-linux
   before_script:
     - apt-get update && apt-get install -y --no-install-recommends build-essential
   script:
@@ -128,6 +134,8 @@ test:linux-x64:
 docs:
   stage: docs
   image: mcr.microsoft.com/dotnet/sdk:10.0
+  tags:
+    - docker-linux
   script:
     - dotnet restore RedBird.slnx
     - dotnet tool restore
@@ -141,6 +149,8 @@ docs:
 package:
   stage: package
   image: mcr.microsoft.com/dotnet/sdk:10.0
+  tags:
+    - docker-linux
   # This job rebuilds everything it packages, so it does not need test reports or the generated documentation downloaded from earlier jobs.
   dependencies: []
   before_script:
@@ -166,6 +176,8 @@ package:
 pages:
   stage: package
   image: alpine:3.22
+  tags:
+    - docker-linux
   needs:
     # Download the docs job's artifact rather than rebuilding the site.
     - job: docs
@@ -183,6 +195,8 @@ pages:
 release:
   stage: release
   image: node:22.22.2-bookworm
+  tags:
+    - docker-linux
   # Ask GitLab for a short-lived token whose audience is only NuGet.org. NuGet.org exchanges this token for a temporary API key
   id_tokens:
     NUGET_ID_TOKEN:
