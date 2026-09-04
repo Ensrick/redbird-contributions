@@ -18,10 +18,10 @@ public unsafe sealed class OSMemoryCodeWriter : CodeWriter, IDisposable
     private bool _disposed;
     public OSMemoryCodeWriter(byte* data, int length, ILogger? logger = null)
     {
-        _logger?.CodeWriterCreated((IntPtr)data, length);
+        _logger = logger;
         this.data = data;
         this.length = length;
-        _logger = logger;
+        _logger?.CodeWriterCreated((UInt64)data, length);
         SetReadPermissions();
     }
 
@@ -35,19 +35,19 @@ public unsafe sealed class OSMemoryCodeWriter : CodeWriter, IDisposable
 
     public OSMemoryCodeWriter(ReadOnlySpan<byte> data, ILogger? logger = null)
     {
+        _logger = logger;
         fixed (byte* ptr = data)
         {
-            _logger?.CodeWriterCreated((IntPtr)ptr, data.Length);
+            _logger?.CodeWriterCreated((UInt64)ptr, data.Length);
             this.data = ptr;
         }
         length = data.Length;
-        _logger = logger;
         SetReadPermissions();
     }
 
     public override void WriteByte(byte b)
     {
-        _logger?.CodeWriterWriteByte(b, currentPosition, length, (IntPtr)data);
+        _logger?.CodeWriterWriteByte(b, currentPosition, length, (UInt64)data);
         if (currentPosition >= length)
             return;
         data[currentPosition++] = b;

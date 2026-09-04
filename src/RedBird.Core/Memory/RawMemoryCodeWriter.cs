@@ -18,26 +18,26 @@ public unsafe sealed class RawMemoryCodeWriter : CodeWriter
 
     public RawMemoryCodeWriter(byte* data, int length, ILogger? logger = null)
     {
-        _logger?.CodeWriterCreated((IntPtr)data, length);
+        _logger = logger;
         this.data = data;
         this.length = length;
-        _logger = logger;
+        _logger?.CodeWriterCreated((UInt64)data, length);
     }
 
     public RawMemoryCodeWriter(ReadOnlySpan<byte> data, ILogger? logger = null)
     {
+        _logger = logger;
         fixed (byte* ptr = data)
         {
-            _logger?.CodeWriterCreated((IntPtr)ptr, length);
+            _logger?.CodeWriterCreated((UInt64)ptr, data.Length);
             this.data = ptr;
         }
         length = data.Length;
-        _logger = logger;
     }
 
     public override void WriteByte(byte b)
     {
-        _logger?.CodeWriterWriteByte(b, currentPosition, length, (IntPtr)data);
+        _logger?.CodeWriterWriteByte(b, currentPosition, length, (UInt64)data);
         if (currentPosition >= length)
             return;
         data[currentPosition++] = b;

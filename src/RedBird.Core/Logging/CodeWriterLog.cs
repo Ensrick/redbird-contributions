@@ -9,11 +9,11 @@ public static partial class CodeWriterLog
         EventId = 12,
         Level = LogLevel.Information,
         Message = "Creating with target {Address:X16}, length={Length}")]
-    public static partial void CodeWriterCreated(this ILogger logger, IntPtr address, int length);
+    public static partial void CodeWriterCreated(this ILogger logger, UInt64 address, int length);
 
     [LoggerMessage(
         EventId = 13,
         Level = LogLevel.Debug,
         Message = "Written byte {ByteValue} to {Position}/{Length} at {Address:X16}")]
-    public static partial void CodeWriterWriteByte(this ILogger logger, byte byteValue, int position, int length, IntPtr address);
+    public static partial void CodeWriterWriteByte(this ILogger logger, byte byteValue, int position, int length, UInt64 address);
 }
