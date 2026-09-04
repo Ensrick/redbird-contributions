@@ -260,3 +260,10 @@ RedBird.NET is licensed under [LGPL-3.0-or-later](LICENSE.txt).
 - Stevemk14ebr and the contributors of the native [PolyHook2](https://github.com/stevemk14ebr/PolyHook_2_0) hooking library (Pretty much the best standalone hooking lib out there I reckon)
 - -1212 (Safe Linux64 patching)
 - Henry (The picture used for the logo - CC-BY-2.0, please see [ATTRIBUTIONS.md](docs/ATTRIBUTIONS.md#project-logo))
+
+## Support the Project
+
+This is a project maintained in my (@Rawra) free time.  
+If you enjoy it and want to support its continued development, you can buy me a coffee:  
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/0xrawra)
