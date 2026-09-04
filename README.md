@@ -1,4 +1,3 @@
-
 <div align="center">
 <img src="docs/images/logo.png" alt="logo" width="256" height="256"/>
 
@@ -9,9 +8,11 @@ It offers X64 and X86 detour engines, transactional pattern-based hooks, executa
 
 <br/>
 
-| CI/CD | Release | Tech Stack | Platform | License |
-|:---:|:---:|:---:|:---:|:---:|
-| [![pipeline](https://gitlab.com/Rawra/redbird/badges/main/pipeline.svg)](https://gitlab.com/Rawra/redbird/-/pipelines) | [![latest release](https://gitlab.com/Rawra/redbird/-/badges/release.svg)](https://gitlab.com/Rawra/redbird/-/releases) | ![x64](https://img.shields.io/badge/CPU-x64-orange) ![C#](https://img.shields.io/badge/C%23-239120?logo=c-sharp&logoColor=white) [![Iced](https://img.shields.io/badge/Iced-000000)](https://github.com/icedland/iced)| ![Windows](https://img.shields.io/badge/OS-Windows-0078D6?logo=windows)  ![Linux](https://img.shields.io/badge/OS-Linux-FCC624?logo=linux&logoColor=black) | [![license](https://img.shields.io/badge/license-LGPL--3.0--or--later-blue.svg)](LICENSE.txt)
+| CI/CD | Release | Downloads | License |
+|:---:|:---:|:---:|:---:|
+| [![pipeline](https://gitlab.com/Rawra/redbird/badges/main/pipeline.svg)](https://gitlab.com/Rawra/redbird/-/pipelines) | [![latest release](https://gitlab.com/Rawra/redbird/-/badges/release.svg)](https://gitlab.com/Rawra/redbird/-/releases) | [![NuGet Downloads](https://img.shields.io/nuget/dt/CallingConventionDispatcher.svg)](https://www.nuget.org/packages/RedBird/) | [![license](https://img.shields.io/badge/license-LGPL--3.0--or--later-blue.svg)](LICENSE.txt) |
+
+![x86 | x64](https://img.shields.io/badge/CPU-x86%20%7C%20x64-orange) ![C#](https://img.shields.io/badge/C%23-239120?logo=c-sharp&logoColor=white) [![Iced](https://img.shields.io/badge/Iced-000000)](https://github.com/icedland/iced) ![Windows](https://img.shields.io/badge/OS-Windows-0078D6?logo=windows) ![Linux](https://img.shields.io/badge/OS-Linux-FCC624?logo=linux&logoColor=black)
 
 </div>
 
