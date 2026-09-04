@@ -10,6 +10,11 @@ fi
 rm -rf -- artifacts/packages artifacts/redbird-docs-*.zip docs/_site
 mkdir -p artifacts/packages
 
+# Release jobs start from a clean checkout. 
+# Build the native Linux companion before MSBuild evaluates RedBird.Core's pack items so the final, public packages contain the same runtime asset
+# exercised by test:linux-x64 and checked by validate-packages.sh.
+sh src/RedBird.Core/native/linux-x64/build.sh
+
 dotnet restore RedBird.slnx
 dotnet build RedBird.slnx -c Release --no-restore \
   -p:Version="$version" \

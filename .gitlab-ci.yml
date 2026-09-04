@@ -147,7 +147,9 @@ package:
     # The Linux runtime companion is generated from C source; package validation needs unzip.
     - apt-get update && apt-get install -y --no-install-recommends build-essential unzip
   script:
-    # CI_PIPELINE_IID is a project-local, increasing pipeline number.
+    # This is deliberately a disposable pre-release version, not the public package version.
+    # CI_PIPELINE_IID is a project-local increasing number, so parallel pipelines cannot create identically named validation packages. 
+    # semantic-release calculates the real version later.
     - export PACKAGE_VERSION="0.0.0-ci.$CI_PIPELINE_IID"
     # Jobs have isolated filesystems. Rebuild the native companion here instead of relying on the copy produced and exercised by test:linux-x64 in a different job.
     - sh src/RedBird.Core/native/linux-x64/build.sh

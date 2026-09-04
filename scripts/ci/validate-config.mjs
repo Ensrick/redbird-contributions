@@ -35,6 +35,9 @@ const packageScript = JSON.stringify(pipeline.package.script);
 if (!packageScript.includes('export PACKAGE_VERSION=') || !packageScript.includes('-p:Version=')) {
   throw new Error('The package job must stamp its CI version into assemblies and packages.');
 }
+if (!packageScript.includes('native/linux-x64/build.sh')) {
+  throw new Error('The package job must build the Linux thread-patch runtime asset.');
+}
 if (!pipeline['test:x64'].artifacts?.reports?.junit || !pipeline['test:x86'].artifacts?.reports?.junit) {
   throw new Error('Both architecture jobs must publish JUnit reports.');
 }
@@ -72,6 +75,19 @@ const execIndex = pluginNames.indexOf('@semantic-release/exec');
 const gitlabIndex = pluginNames.indexOf('@semantic-release/gitlab');
 if (!(gitIndex >= 0 && gitIndex < execIndex && execIndex < gitlabIndex)) {
   throw new Error('Release order must commit the changelog, build/publish packages, then create the GitLab release.');
+}
+
+const prepareScript = fs.readFileSync('scripts/ci/prepare-release.sh', 'utf8');
+if (!prepareScript.includes('native/linux-x64/build.sh')) {
+  throw new Error('Release preparation must build the Linux thread-patch runtime asset.');
+}
+
+const coreProject = fs.readFileSync('src/RedBird.Core/RedBird.Core.csproj', 'utf8');
+if (!coreProject.includes('<None Include="runtimes/linux-x64/native/libredbird_thread_patch.so"')) {
+  throw new Error('RedBird.Core must explicitly include the Linux thread-patch runtime asset when packing.');
+}
+if (!coreProject.includes('PackagePath="runtimes/linux-x64/native/libredbird_thread_patch.so"')) {
+  throw new Error('RedBird.Core has an incorrect NuGet package path for the Linux thread-patch runtime asset.');
 }
 
 const buildProps = fs.readFileSync('Directory.Build.props', 'utf8');
