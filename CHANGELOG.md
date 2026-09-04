@@ -1,3 +1,5 @@
+## 1.0.0 (2026-09-04)
+
 # Changelog
 
 All notable changes are recorded here by semantic-release from Conventional Commit messages.
