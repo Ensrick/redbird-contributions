@@ -19,7 +19,9 @@
     "content": [
       { "files": ["index.md", "toc.yml"] },
       { "files": ["articles/**/*.md", "articles/**/toc.yml"] },
-      { "files": ["api/**/*.yml", "api/index.md"] },
+      { "files": ["api/**/*.yml", "api/index.md"] }
+    ],
+    "resource": [
       { "files": ["images/**"] }
     ],
     "output": "_site",
