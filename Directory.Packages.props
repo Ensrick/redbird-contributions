@@ -11,7 +11,7 @@
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
     <PackageVersion Include="MinHook.NET" Version="1.1.2" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
-    <PackageVersion Include="PolyHook2.NET" Version="1.1.6" />
+    <PackageVersion Include="PolyHook2.NET" Version="1.1.7" />
     <PackageVersion Include="PolySharp" Version="1.16.0" />
     <PackageVersion Include="Serilog" Version="4.4.0" />
     <PackageVersion Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
