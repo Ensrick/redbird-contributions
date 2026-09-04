@@ -15,8 +15,6 @@ case:
 - [Hooks and backends](articles/hooks-and-backends.md)
 - [Calling-convention adapters](articles/calling-conventions.md)
 - [Executable functions](articles/executable-functions.md)
-- [Migration from CallingConventionDispatcher](articles/migration-from-dispatcher.md)
-- [CI and releases](articles/ci-and-releases.md)
 - [API reference](api/index.md)
 
 > [!WARNING]
