@@ -55,7 +55,7 @@ public static class BackendCatalog
     public static void RequireLeadingJumpRelocation(string name)
     {
         Assert.SkipWhen(name == MinHook,
-            "MinHook.NET reads a near JMP's rel32 displacement as a rel8 (Trampoline.cs, the short/near branches are swapped), so it cannot relocate a jump found at the entry point - which covers both thunks and layered hooks. Remove this gate once the patched Trampoline.cs is in use.");
+            "MinHook.NET reads a near JMP's rel32 displacement as a rel8 (Trampoline.cs, the short/near branches are swapped), so it cannot relocate a jump found at the entry point: which covers both thunks and layered hooks. Remove this gate once the underlying issue is fixed.");
     }
 
     /// <summary>

@@ -2,6 +2,8 @@
 using System.Runtime.InteropServices;
 using Xunit;
 using RedBird.Core.Memory;
+using RedBird.Core.PInvoke;
+using RedBird.Core.Platform;
 
 namespace RedBird.X64.Tests;
 
@@ -116,5 +118,38 @@ public sealed unsafe class StubAllocatorTests
         IntPtr stub = NativeMemoryManager.AllocateStub(16);
         Assert.NotEqual(IntPtr.Zero, stub);
         Assert.True(NativeMemoryManager.WriteStub(stub, new byte[] { 0x90, 0xC3 }));
+    }
+
+    [Fact]
+    public void WindowsFallbackAllocator_StaysInsideTheRequestedRange()
+    {
+        Assert.SkipUnless(PlatformInfo.IsWindows, "The VirtualQuery fallback is Windows-specific.");
+
+        NativeMethods.Win32SystemInfo info = default;
+        NativeMethods.GetNativeSystemInfo(&info);
+
+        const UInt64 Reach = 0x7000_0000UL;
+        const UInt64 Size = 64 * 1024;
+        UInt64 anchor = SomeCodeAddress;
+        UInt64 low = anchor > Reach ? anchor - Reach : 0;
+        UInt64 high = anchor + Reach;
+
+        UInt64 allocation = NativeMemoryManager.WindowsBoundAllocFallback(
+            low,
+            high,
+            Size,
+            MemoryProtection.ExecuteReadWrite,
+            info.dwAllocationGranularity);
+
+        Assert.NotEqual(0UL, allocation);
+        try
+        {
+            Assert.InRange(allocation, low, high - Size);
+        }
+        finally
+        {
+            if (allocation != 0)
+                NativeMemoryManager.Free((IntPtr)allocation, checked((int)Size));
+        }
     }
 }

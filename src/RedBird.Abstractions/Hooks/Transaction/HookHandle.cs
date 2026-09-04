@@ -28,7 +28,7 @@ public class HookHandle<THook> where THook : class, IHook
 
     /// <summary>The hook, or a exception.</summary>
     /// <exception cref="InvalidOperationException">The hook was never installed.</exception>
-    public THook Require() => Hook ?? throw new InvalidOperationException($"Hook '{Name}' is not installed. {(Failure is null ? "It was never registered or the transaction has not been committed." : "Registration failed: " + Failure.Message)}", Failure);
+    public THook Require() => Hook ?? throw new InvalidOperationException($"Hook [{Name}] is not installed. {(Failure is null ? "It was never registered or the transaction has not been committed." : "Registration failed: " + Failure.Message)}", Failure);
 
     /// <summary>Diagnostic name, assigned at registration from the caller's expression.</summary>
     public string Name { get; private set; } = "<unregistered>";

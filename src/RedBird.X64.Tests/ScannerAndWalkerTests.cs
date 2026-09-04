@@ -43,6 +43,7 @@ public sealed class ScannerAndWalkerTests
 
         Assert.True(scanner.Found);
         Assert.Equal(target.Address, scanner.CurrentAddress);
+        Assert.Equal(0, scanner.CurrentOffset);
     }
 
     [Fact]
@@ -54,6 +55,7 @@ public sealed class ScannerAndWalkerTests
         DataScanner scanner = DataScanner.Create(region).Scan("DE AD BE EF CA FE");
 
         Assert.False(scanner.Found);
+        Assert.Equal(0, scanner.CurrentOffset);
 
         // A failed scan must not produce a usable-looking address downstream.
         Assert.False(scanner.TryReadFlowControlTarget(out _));
@@ -70,6 +72,7 @@ public sealed class ScannerAndWalkerTests
         DataScanner scanner = DataScanner.Create(region).Scan("B8 34 12 00 00", offset: 5);
 
         Assert.Equal(target.Address + 5, scanner.CurrentAddress);
+        Assert.Equal(5, scanner.CurrentOffset);
     }
 
     [Fact]
@@ -129,6 +132,11 @@ public sealed class ScannerAndWalkerTests
 
         Assert.True(scanner.Found);
         Assert.Equal(target.Address + 2, scanner.CurrentAddress);
+        Assert.Equal(2, scanner.CurrentOffset);
+
+        scanner.Advance(-4);
+        Assert.Equal(target.Address - 2, scanner.CurrentAddress);
+        Assert.Equal(-2, scanner.CurrentOffset);
     }
 
     // -------------------------------------------------------------------------

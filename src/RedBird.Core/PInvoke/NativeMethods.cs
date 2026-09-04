@@ -220,7 +220,11 @@ public unsafe static class NativeMethods
             WriteProcessMemory = (delegate* unmanaged[Stdcall, SuppressGCTransition]<IntPtr, IntPtr, byte*, UInt32, UInt32*, bool>)NativeLibrary.GetExport(kernel32, "WriteProcessMemory");
             ReadProcessMemory = (delegate* unmanaged[Stdcall, SuppressGCTransition]<IntPtr, IntPtr, byte*, UInt32, UInt32*, bool>)NativeLibrary.GetExport(kernel32, "ReadProcessMemory");
             VirtualAlloc = (delegate* unmanaged[Stdcall, SuppressGCTransition]<IntPtr, UIntPtr, Win32AllocationType, Win32MemoryPermissions, IntPtr>)NativeLibrary.GetExport(kernel32, "VirtualAlloc");
-            VirtualAlloc2 = (delegate* unmanaged[Stdcall, SuppressGCTransition]<IntPtr, IntPtr, UIntPtr, Win32AllocationType, Win32MemoryPermissions, Win32MEM_EXTENDED_PARAMETER*, uint, IntPtr>)NativeLibrary.GetExport(kernelbase, "VirtualAlloc2");
+            // VirtualAlloc2 is optional. Hosts that do not export it use the explicit VirtualQuery/VirtualAlloc walk in NativeMemoryManager instead.
+            if (NativeLibrary.TryGetExport(kernelbase, "VirtualAlloc2", out IntPtr virtualAlloc2))
+            {
+                VirtualAlloc2 = (delegate* unmanaged[Stdcall, SuppressGCTransition]<IntPtr, IntPtr, UIntPtr, Win32AllocationType, Win32MemoryPermissions, Win32MEM_EXTENDED_PARAMETER*, uint, IntPtr>)virtualAlloc2;
+            }
             VirtualAllocEx = (delegate* unmanaged[Stdcall, SuppressGCTransition]<IntPtr, IntPtr, UIntPtr, Win32AllocationType, Win32MemoryPermissions, IntPtr>)NativeLibrary.GetExport(kernel32, "VirtualAllocEx");
             VirtualFree = (delegate* unmanaged[Stdcall, SuppressGCTransition]<IntPtr, UIntPtr, UInt32, bool>)NativeLibrary.GetExport(kernel32, "VirtualFree");
             VirtualProtect = (delegate* unmanaged[Stdcall, SuppressGCTransition]<IntPtr, UInt32, Win32MemoryPermissions, Win32MemoryPermissions*, bool>)NativeLibrary.GetExport(kernel32, "VirtualProtect");

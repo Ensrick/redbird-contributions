@@ -1,16 +1,17 @@
-﻿using System;
-using System.Runtime.InteropServices;
-using Iced.Intel;
-using Xunit;
+﻿using Iced.Intel;
 using RedBird.Abstractions.Hooks;
 using RedBird.Abstractions.Hooks.Transaction;
 using RedBird.Core.Memory;
-using RedBird.X64.Tests.Infrastructure;
+using RedBird.X64.Assembly;
 using RedBird.X64.Assembly.InstructionWalker;
 using RedBird.X64.Extensions;
 using RedBird.X64.Hooks;
 using RedBird.X64.Hooks.Transaction;
 using RedBird.X64.Memory.Scanners;
+using RedBird.X64.Tests.Infrastructure;
+using System;
+using System.Runtime.InteropServices;
+using Xunit;
 using static Iced.Intel.AssemblerRegisters;
 
 namespace RedBird.X64.Tests;
@@ -290,6 +291,10 @@ public sealed class HookTransactionTests
     [Fact]
     public void AddInline_CallsManagedCodeThroughFastcall()
     {
+        Assert.SkipUnless(
+            RuntimeInformation.IsOSPlatform(OSPlatform.Windows),
+            "X64FastcallSafe emits the Microsoft x64 ABI; Linux managed callbacks use System V AMD64.");
+
         // The shape the consumer paste uses: an inline hook whose stub calls back into managed code with register values pulled out of the interrupted function.
         using ExecutableFunction target = ExecutableFunction.Create((asm, _) =>
         {
@@ -353,6 +358,22 @@ public sealed class HookTransactionTests
 
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate UInt64 TwoArgumentCallback(UInt64 first, UInt64 second);
+
+    [Fact]
+    public void AddContextHook_WithoutCallerOwnedHandle_ReturnsAFreshHandle()
+    {
+        using ExecutableFunction target = TestFunctions.Add();
+        using HookTransaction tx = Transaction(target);
+
+        ContextHookDelegate callback = static _ => { };
+        HookHandle<X64InlineHook> handle = tx.AddContextHook(
+            HookTarget.FromAddress(target.Address),
+            callback,
+            name: "transient-context-hook");
+
+        Assert.Equal("transient-context-hook", handle.Name);
+        Assert.False(handle.Success);
+    }
 
     // -------------------------------------------------------------------------
     // The full consumer pattern

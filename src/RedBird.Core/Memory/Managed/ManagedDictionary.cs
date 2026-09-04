@@ -7,7 +7,7 @@ namespace RedBird.Core.Memory.Managed;
 /// A dictionary wrapper that supports Stack-based value overrides (Push/Pop) and Base value modification.
 /// Useful for managed game data that mimics the behavior of ManagedNativeArray.
 /// </summary>
-public class ManagedDictionary<TKey, TValue> where TKey : notnull, IEquatable<TKey>
+public class ManagedDictionary<TKey, TValue> where TKey : notnull
 {
     private readonly Dictionary<TKey, Stack<TValue>> _store = [];
     private readonly TValue _defaultValue;

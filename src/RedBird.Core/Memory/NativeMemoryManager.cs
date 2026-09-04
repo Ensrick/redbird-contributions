@@ -103,7 +103,9 @@ public static unsafe class NativeMemoryManager
             if (requireNear)
             {
                 UInt64 low = targetAddress > RipReach ? targetAddress - RipReach : 0;
-                UInt64 high = targetAddress + RipReach;
+                UInt64 high = targetAddress > UInt64.MaxValue - RipReach
+                    ? UInt64.MaxValue
+                    : targetAddress + RipReach;
                 slabAddress = (IntPtr)BoundAlloc(low, high, SlabSize, MemoryProtection.ExecuteReadWrite);
             }
             else
@@ -422,11 +424,10 @@ public static unsafe class NativeMemoryManager
     }
 
     private static bool IsWithin(UInt64 address, UInt64 low, UInt64 high, UInt64 size)
-        => address >= low && address + size <= high;
+        => address >= low && address <= high && size <= high - address;
 
     /// <summary>
-    /// Wraps <c>mmap</c>: normalises <c>MAP_FAILED</c> to <see cref="IntPtr.Zero"/> and falls back
-    /// to a write-only-then-finalise mapping where the kernel refuses W+X.
+    /// Wraps <c>mmap</c>: normalises <c>MAP_FAILED</c> to <see cref="IntPtr.Zero"/> and falls back to a write-only-then-finalise mapping where the kernel refuses W+X.
     /// </summary>
     private static IntPtr PosixMap(IntPtr address, UInt64 size, MemoryProtection protection, bool fixedNoReplace)
     {
@@ -462,39 +463,86 @@ public static unsafe class NativeMemoryManager
         UInt64 applicationMin = (UInt64)info.lpMinimumApplicationAddress;
         UInt64 applicationMax = (UInt64)info.lpMaximumApplicationAddress;
 
-        low = Math.Max((low + granularity - 1) & ~(granularity - 1), (applicationMin + granularity - 1) & ~(granularity - 1));
+        low = Math.Max(AlignUp(low, granularity), AlignUp(applicationMin, granularity));
         high = Math.Min(high & ~(granularity - 1), applicationMax & ~(granularity - 1));
 
-        if (low >= high)
+        if (low >= high || size > high - low)
             return 0;
 
         UInt64 viaVirtualAlloc2 = TryVirtualAlloc2(low, high, size, protection);
         if (viaVirtualAlloc2 != 0)
-            return viaVirtualAlloc2;
+        {
+            if (IsWithin(viaVirtualAlloc2, low, high, size))
+                return viaVirtualAlloc2;
 
-        IntPtr current = (IntPtr)low;
+            // Defensive only: the address-requirements contract should make this impossible.
+            NativeMethods.VirtualFree((IntPtr)viaVirtualAlloc2, UIntPtr.Zero, (uint)NativeMethods.Win32AllocationType.MEM_RELEASE);
+        }
+
+        // VirtualAlloc2 can fail in a fragmented process even when a suitable hole exists.
+        // Keep the explicit region walk from the pre-refactor allocator as the reliable fallback.
+        return WindowsBoundAllocFallback(low, high, size, protection, granularity);
+    }
+
+    /// <summary>
+    /// Walks the current process address space and tries every allocation-granularity-aligned free range inside <c>[low, high)</c>. 
+    /// Kept separate so the fallback can be regression-tested independently of VirtualAlloc2.
+    /// </summary>
+    internal static UInt64 WindowsBoundAllocFallback(
+        UInt64 low,
+        UInt64 high,
+        UInt64 size,
+        MemoryProtection protection,
+        UInt64 granularity)
+    {
+        if (granularity == 0 || (granularity & (granularity - 1)) != 0)
+            throw new ArgumentOutOfRangeException(nameof(granularity), "Allocation granularity must be a power of two.");
+        if (low >= high || size == 0 || size > high - low)
+            return 0;
+
+        UInt64 current = low;
         NativeMethods.Win32MEMORY_BASIC_INFORMATION mbi = default;
 
-        while ((UInt64)current + size <= high)
+        while (current < high && size <= high - current)
         {
-            if (NativeMethods.VirtualQueryEx(InstructionCache.CurrentProcessHandle, current, &mbi, (uint)Marshal.SizeOf<NativeMethods.Win32MEMORY_BASIC_INFORMATION>()) == 0)
+            if (NativeMethods.VirtualQueryEx(InstructionCache.CurrentProcessHandle, (IntPtr)current, &mbi, (uint)Marshal.SizeOf<NativeMethods.Win32MEMORY_BASIC_INFORMATION>()) == 0)
             {
                 break;
             }
 
+            UInt64 regionBase = (UInt64)mbi.BaseAddress;
+            UInt64 regionSize = (UInt64)mbi.RegionSize;
+            if (regionSize == 0 || regionBase > UInt64.MaxValue - regionSize)
+                break;
+
+            UInt64 regionEnd = regionBase + regionSize;
+
             if (mbi.State == (uint)NativeMethods.Win32AllocationType.MEM_FREE)
             {
-                UInt64 candidate = ((UInt64)mbi.BaseAddress + granularity - 1) & ~(granularity - 1);
+                // VirtualQuery returns the base of the containing region, which may be below the requested lower bound. The refactor accidentally aligned regionBase alone,
+                // allowing allocations outside the +/-2 GB window on fragmented processes.
+                UInt64 candidate = AlignUp(Math.Max(current, regionBase), granularity);
+                UInt64 candidateLimit = Math.Min(regionEnd, high);
 
-                if (candidate + size <= (UInt64)mbi.BaseAddress + (UInt64)mbi.RegionSize && candidate + size <= high)
+                if (candidate >= low && candidate <= candidateLimit && size <= candidateLimit - candidate)
                 {
                     IntPtr allocated = NativeMethods.VirtualAlloc((IntPtr)candidate, (UIntPtr)size, NativeMethods.Win32AllocationType.MEM_COMMIT | NativeMethods.Win32AllocationType.MEM_RESERVE, (NativeMethods.Win32MemoryPermissions)MemoryProtectionConverter.ToWin32(protection));
-                    if (allocated != IntPtr.Zero)
+                    if (allocated != IntPtr.Zero && IsWithin((UInt64)allocated, low, high, size))
                         return (UInt64)allocated;
+
+                    // A racing allocator may have taken this exact hole. Move one granularity unit forward and keep looking instead of abandoning the whole range.
+                    if (candidate <= UInt64.MaxValue - granularity)
+                    {
+                        current = candidate + granularity;
+                        continue;
+                    }
                 }
             }
 
-            current = (IntPtr)((UInt64)mbi.BaseAddress + (UInt64)mbi.RegionSize);
+            UInt64 next = AlignUp(regionEnd, granularity);
+            if (next <= current)
+                break;
+            current = next;
         }
 
         return 0;
@@ -504,6 +552,9 @@ public static unsafe class NativeMemoryManager
     {
         try
         {
+            if (NativeMethods.VirtualAlloc2 == null)
+                return 0;
+
             NativeMethods.Win32MEM_ADDRESS_REQUIREMENTS requirements = new()
             {
                 LowestStartingAddress = (IntPtr)low,
@@ -517,9 +568,8 @@ public static unsafe class NativeMemoryManager
             };
             parameter.Value.Pointer = (IntPtr)(&requirements);
 
-            IntPtr result = NativeMethods.VirtualAlloc2(InstructionCache.CurrentProcessHandle, IntPtr.Zero, (UIntPtr)size, 
-                NativeMethods.Win32AllocationType.MEM_COMMIT | NativeMethods.Win32AllocationType.MEM_RESERVE, 
-                (NativeMethods.Win32MemoryPermissions)MemoryProtectionConverter.ToWin32(protection), &parameter, 1);
+            // A null process handle is the documented current-process form and matches the allocator used before the refactor.
+            IntPtr result = NativeMethods.VirtualAlloc2(IntPtr.Zero, IntPtr.Zero, (UIntPtr)size, NativeMethods.Win32AllocationType.MEM_COMMIT | NativeMethods.Win32AllocationType.MEM_RESERVE, (NativeMethods.Win32MemoryPermissions)MemoryProtectionConverter.ToWin32(protection), &parameter, 1);
             return (UInt64)result;
         }
         catch
@@ -527,5 +577,14 @@ public static unsafe class NativeMemoryManager
             // VirtualAlloc2 is Windows 10+; older hosts fall through to the VirtualQuery walk.
             return 0;
         }
+    }
+
+    private static UInt64 AlignUp(UInt64 value, UInt64 alignment)
+    {
+        UInt64 mask = alignment - 1;
+        if (value > UInt64.MaxValue - mask)
+            return UInt64.MaxValue & ~mask;
+
+        return (value + mask) & ~mask;
     }
 }

@@ -122,6 +122,35 @@ public sealed unsafe class NativeDetourTests
         Assert.Equal(7, detour.Original(3, 4));
     }
 
+    [Fact]
+    public void CommonWindowsCompilerPrologue_CanBePrepared()
+    {
+        // Exact prefix from the reported real-world failure:
+        // mov [rsp+8],rbx; push rdi; movsxd rbx,edx; mov rdi,rcx; mov eax,ebx
+        // It provides six bytes for Indirect and fourteen for Absolute.
+        using ExecutableFunction target = ExecutableFunction.Create(static assembler =>
+        {
+            assembler.db(new byte[]
+            {
+                0x48, 0x89, 0x5C, 0x24, 0x08,
+                0x57,
+                0x48, 0x63, 0xDA,
+                0x48, 0x8B, 0xF9,
+                0x8B, 0xC3,
+                0x5F,
+                0xC3,
+            });
+        });
+
+        NativeDetourBackend backend = Backend(NativeDetourOptions.Default);
+        using NativeDetour<TestDelegates.BinaryInt> detour =
+            Detour<TestDelegates.BinaryInt>(backend, target.Address, (a, b) => 0, "compiler-prologue");
+
+        Assert.Equal(DetourScheme.Indirect, detour.Scheme);
+        Assert.InRange(detour.DisplacedByteCount, 6, 14);
+        Assert.NotEqual(IntPtr.Zero, detour.TrampolineAddress);
+    }
+
     // -------------------------------------------------------------------------
     // Thunks
     // -------------------------------------------------------------------------

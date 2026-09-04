@@ -443,7 +443,7 @@ public sealed class HookTransaction : IDisposable
     private void ThrowIfNotBuilding()
     {
         if (State != TransactionState.Building)
-            throw new InvalidOperationException($"Hook transaction '{Name}' is {State}; registrations are closed and it cannot be committed again.");
+            throw new InvalidOperationException($"Hook transaction [{Name}] is {State}; registrations are closed and it cannot be committed again.");
     }
 
     private static void ArgumentNullThrow(object? value, string parameterName)

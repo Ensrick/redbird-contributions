@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Runtime.InteropServices;
 using Xunit;
 using RedBird.Core.Memory;
 using RedBird.Core.PInvoke;
@@ -96,7 +97,10 @@ public sealed unsafe class MemoryProtectionBoundaryTests
     [Fact]
     public void ThreadPatchScope_RestoresEveryTouchedPageIndependently()
     {
-        Assert.SkipUnless(PlatformInfo.IsWindows, "The protected thread patcher is Win32-only.");
+        Assert.SkipUnless(
+            PlatformInfo.IsWindows ||
+            (PlatformInfo.IsLinux && ProcMaps.IsAvailable && RuntimeInformation.ProcessArchitecture == Architecture.X64),
+            "Protected peer-thread patching requires Windows x86/x64 or Linux x64 with /proc/self/maps.");
 
         int pageSize = PlatformInfo.PageSize;
         int allocationSize = checked(pageSize * 2);

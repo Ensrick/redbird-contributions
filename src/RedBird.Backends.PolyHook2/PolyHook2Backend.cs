@@ -7,8 +7,7 @@ namespace RedBird.Backends.PolyHook2;
 /// <see cref="IHookBackend"/> implemented on top of PolyHook2.NET.
 /// <para>
 /// This assembly is the only place in the solution that references the PolyHook2 package.
-/// Everything else, transactions, descriptors, handles, consumer callbacks, talks to
-/// <see cref="IDetour{TFunction}"/>. Supporting MinHook, Microsoft Detours, or a hand-rolled
+/// Everything else, transactions, descriptors, handles, consumer callbacks, talks to <see cref="IDetour{TFunction}"/>. Supporting MinHook, Microsoft Detours, or a hand-rolled
 /// trampoline engine means shipping a sibling package, not editing the core.
 /// </para>
 /// <para>

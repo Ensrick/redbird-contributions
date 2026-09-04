@@ -292,7 +292,7 @@ public abstract unsafe class AssemblyValueSite<T> : IAssemblyValueSite<T>
 
             if (_legacyStack.Count == 0)
             {
-                Logger.LogDebug("Pop on '{Description}' with an empty stack; value stays {CurrentValue}.", Description, CurrentValue);
+                Logger.LogDebug("Pop on [{Description}] with an empty stack; value stays [{CurrentValue}].", Description, CurrentValue);
                 return CurrentValue;
             }
 
@@ -322,7 +322,7 @@ public abstract unsafe class AssemblyValueSite<T> : IAssemblyValueSite<T>
         Encoder encoder = Encoder.Create(32, writer);
 
         if (!encoder.TryEncode(modified, (UInt64)InstructionAddress, out uint encodedLength, out string? error))
-            throw new InvalidOperationException($"Failed to encode '{modified}' for {Description}: {error}");
+            throw new InvalidOperationException($"Failed to encode [{modified}] for [{Description}]: {error}");
 
         if (encodedLength != (uint)_instructionLength)
         {

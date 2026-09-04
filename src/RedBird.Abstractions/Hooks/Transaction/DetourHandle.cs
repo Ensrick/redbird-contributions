@@ -14,7 +14,7 @@ public sealed class DetourHandle<TFunction> : HookHandle<IDetour<TFunction>> whe
     /// Calls the original, un-hooked function.
     /// </summary>
     /// <exception cref="InvalidOperationException">The detour is not installed.</exception>
-    public TFunction Original => _original ?? throw new InvalidOperationException($"Detour '{Name}' is not installed, so the original function cannot be called. {(Failure is null ? "Was the transaction committed?" : "Registration failed: " + Failure.Message)}", Failure);
+    public TFunction Original => _original ?? throw new InvalidOperationException($"Detour [{Name}] is not installed, so the original function cannot be called. {(Failure is null ? "Was the transaction committed?" : "Registration failed: " + Failure.Message)}", Failure);
 
     /// <summary>
     /// Non-throwing variant for call sites that must keep running when a pattern goes stale

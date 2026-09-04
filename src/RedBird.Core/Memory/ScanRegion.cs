@@ -37,6 +37,16 @@ public sealed class ScanRegion : IDisposable
     /// <summary>Converts a region-relative offset into an absolute virtual address.</summary>
     public UInt64 ToAddress(long offset) => BaseAddress + (UInt64)offset;
 
+    /// <summary>Converts an absolute virtual address into a signed byte offset from <see cref="BaseAddress"/>.</summary>
+    /// <remarks>
+    /// A signed result preserves the meaning of a scanner cursor deliberately moved before the region base. 
+    /// The method throws only when the distance cannot be represented by <see cref="Int64"/>.
+    /// </remarks>
+    public long ToOffset(UInt64 address)
+        => address >= BaseAddress
+            ? checked((long)(address - BaseAddress))
+            : checked(-(long)(BaseAddress - address));
+
     /// <summary>
     /// Wraps live memory without copying. The caller guarantees the pages stay mapped and readable for the lifetime of the region - which is trivially true for a loaded module.
     /// </summary>

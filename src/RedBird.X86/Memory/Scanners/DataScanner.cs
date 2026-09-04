@@ -52,6 +52,12 @@ public sealed class DataScanner
     /// <summary>Absolute virtual address the scanner is currently pointing at.</summary>
     public UInt64 CurrentAddress => _currentAddress;
 
+    /// <summary>
+    /// Signed byte offset of <see cref="CurrentAddress"/> from the scan region's base address.
+    /// Returns zero after a failed scan; inspect <see cref="Found"/> to distinguish that state from a successful match at offset zero.
+    /// </summary>
+    public long CurrentOffset => _scanSuccess ? _region.ToOffset(_currentAddress) : 0;
+
     /// <summary>Whether the last <see cref="Scan(string, int)"/> found its pattern.</summary>
     public bool Found => _scanSuccess;
 

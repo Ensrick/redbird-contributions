@@ -21,7 +21,7 @@ public sealed class ManagedAssemblyDisplacement<T> : AssemblyValueSite<T> where 
     /// <param name="description">Optional label for diagnostics.</param>
     public ManagedAssemblyDisplacement(
         IntPtr instructionAddress,
-        int memoryOperand = 1,
+        int memoryOperand = 0,
         Int64 withConstantValueOffset = 0,
         ILogger? logger = null,
         string? description = null)

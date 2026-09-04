@@ -97,31 +97,41 @@ public sealed class DetourChainingTests
         IDetour<TestDelegates.NullaryInt>? second = null;
         IDetour<TestDelegates.NullaryInt>? third = null;
 
-        first = backend.CreateDetour(BackendCatalog.Request<TestDelegates.NullaryInt>(
-            target.Address, () => first!.Original() + 10, "first"));
-        first.Enable();
+        try
+        {
+            first = backend.CreateDetour(BackendCatalog.Request<TestDelegates.NullaryInt>(
+                target.Address, () => first!.Original() + 10, "first"));
+            first.Enable();
 
-        second = backend.CreateDetour(BackendCatalog.Request<TestDelegates.NullaryInt>(
-            target.Address, () => second!.Original() + 100, "second"));
-        second.Enable();
+            second = backend.CreateDetour(BackendCatalog.Request<TestDelegates.NullaryInt>(
+                target.Address, () => second!.Original() + 100, "second"));
+            second.Enable();
 
-        third = backend.CreateDetour(BackendCatalog.Request<TestDelegates.NullaryInt>(
-            target.Address, () => third!.Original() + 1000, "third"));
-        third.Enable();
+            third = backend.CreateDetour(BackendCatalog.Request<TestDelegates.NullaryInt>(
+                target.Address, () => third!.Original() + 1000, "third"));
+            third.Enable();
 
-        Assert.Equal(1111, call());
+            Assert.Equal(1111, call());
 
-        // Reverse order, one layer at a time.
-        third.Dispose();
-        Assert.Equal(111, call());
+            // Reverse order, one layer at a time.
+            third.Dispose();
+            Assert.Equal(111, call());
 
-        second.Dispose();
-        Assert.Equal(11, call());
+            second.Dispose();
+            Assert.Equal(11, call());
 
-        first.Dispose();
-        Assert.Equal(1, call());
+            first.Dispose();
+            Assert.Equal(1, call());
 
-        Assert.True(target.MatchesOriginal(target.CodeLength));
+            Assert.True(target.MatchesOriginal(target.CodeLength));
+        }
+        finally
+        {
+            // A backend failure must not poison the process-wide chain registry for the next test when its executable fixture reuses the same virtual address.
+            third?.Dispose();
+            second?.Dispose();
+            first?.Dispose();
+        }
     }
 
     [Fact]
@@ -136,35 +146,44 @@ public sealed class DetourChainingTests
         IDetour<TestDelegates.NullaryInt>? second = null;
         IDetour<TestDelegates.NullaryInt>? third = null;
 
-        first = backend.CreateDetour(BackendCatalog.Request<TestDelegates.NullaryInt>(
-            target.Address, () => first!.Original() + 1, "first"));
-        second = backend.CreateDetour(BackendCatalog.Request<TestDelegates.NullaryInt>(
-            target.Address, () => second!.Original() * 10, "second"));
-        third = backend.CreateDetour(BackendCatalog.Request<TestDelegates.NullaryInt>(
-            target.Address, () => third!.Original() + 100, "third"));
+        try
+        {
+            first = backend.CreateDetour(BackendCatalog.Request<TestDelegates.NullaryInt>(
+                target.Address, () => first!.Original() + 1, "first"));
+            second = backend.CreateDetour(BackendCatalog.Request<TestDelegates.NullaryInt>(
+                target.Address, () => second!.Original() * 10, "second"));
+            third = backend.CreateDetour(BackendCatalog.Request<TestDelegates.NullaryInt>(
+                target.Address, () => third!.Original() + 100, "third"));
 
-        first.Enable();
-        second.Enable();
-        third.Enable();
-        Assert.Equal(120, call());
+            first.Enable();
+            second.Enable();
+            third.Enable();
+            Assert.Equal(120, call());
 
-        // Only the managed chain changes; PolyHook2's one physical entry patch stays installed.
-        second.Disable();
-        Assert.Equal(102, call());
+            // Only the managed chain changes; PolyHook2's one physical entry patch stays installed.
+            second.Disable();
+            Assert.Equal(102, call());
 
-        // Re-enabling installs this logical layer at the top of the current chain.
-        second.Enable();
-        Assert.Equal(1020, call());
+            // Re-enabling installs this logical layer at the top of the current chain.
+            second.Enable();
+            Assert.Equal(1020, call());
 
-        // Unlike independently patched layers, removing a lower logical layer is safe here.
-        first.Dispose();
-        Assert.Equal(1010, call());
+            // Unlike independently patched layers, removing a lower logical layer is safe here.
+            first.Dispose();
+            Assert.Equal(1010, call());
 
-        second.Dispose();
-        Assert.Equal(101, call());
-        third.Dispose();
-        Assert.Equal(1, call());
-        Assert.True(target.MatchesOriginal(target.CodeLength));
+            second.Dispose();
+            Assert.Equal(101, call());
+            third.Dispose();
+            Assert.Equal(1, call());
+            Assert.True(target.MatchesOriginal(target.CodeLength));
+        }
+        finally
+        {
+            third?.Dispose();
+            second?.Dispose();
+            first?.Dispose();
+        }
     }
 
     // -------------------------------------------------------------------------

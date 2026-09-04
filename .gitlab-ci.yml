@@ -109,7 +109,7 @@ test:x86:
       junit: artifacts/test-results/x86-junit.xml
 
 # Exercise the Linux signal/futex patch window on a real CLR process. 
-# The native moke test also verifies the ucontext ABI and the helper's no-write failure paths.
+# The native smoke test also verifies the ucontext ABI and the helper's no-write failure paths.
 test:linux-x64:
   stage: test
   image: mcr.microsoft.com/dotnet/sdk:10.0

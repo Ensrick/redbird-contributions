@@ -58,7 +58,7 @@ public sealed class CompiledPattern
 
         string[] parts = pattern.Split([' ', '\t', ','], StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0)
-            throw new ArgumentException($"Pattern '{pattern}' contains no tokens.", nameof(pattern));
+            throw new ArgumentException($"Pattern [{pattern}] contains no tokens.", nameof(pattern));
 
         byte[] bytes = new byte[parts.Length];
         byte[] mask = new byte[parts.Length];
@@ -76,7 +76,7 @@ public sealed class CompiledPattern
 
             if (!byte.TryParse(part, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte value))
             {
-                throw new ArgumentException($"Token '{part}' at index {i} in pattern '{pattern}' is neither a hex byte nor a wildcard.", nameof(pattern));
+                throw new ArgumentException($"Token [{part}] at index {i} in pattern [{pattern}] is neither a hex byte nor a wildcard.", nameof(pattern));
             }
 
             bytes[i] = value;
@@ -85,7 +85,7 @@ public sealed class CompiledPattern
 
         int anchor = SelectAnchor(bytes, mask);
         if (anchor < 0)
-            throw new ArgumentException($"Pattern '{pattern}' contains no literal bytes and would match everywhere.", nameof(pattern));
+            throw new ArgumentException($"Pattern [{pattern}] contains no literal bytes and would match everywhere.", nameof(pattern));
 
         int fingerprintStart = SelectFingerprint(bytes, mask, anchor);
         return new CompiledPattern(pattern, bytes, mask, anchor, fingerprintStart);

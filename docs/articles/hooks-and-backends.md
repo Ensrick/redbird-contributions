@@ -11,7 +11,7 @@ description: Choose a detour backend and install hooks transactionally.
 
 | Backend | Architectures | Notes |
 |---|---|---|
-| `NativeDetourBackend` | X64 | Managed relocation, several jump schemes, chaining, safe Windows patching |
+| `NativeDetourBackend` | X64 | Managed relocation, several jump schemes, chaining, safe Windows and Linux X64 patching |
 | `X86DetourBackend` | X86 | Managed X86 relocation and safe Windows patching |
 | `PolyHook2Backend` | X64/native dependency | One physical hook per target with managed logical layers |
 | `MinHookBackend` | Windows X86/X64 | Adapter over MinHook.NET; upstream relocation limitations still apply |

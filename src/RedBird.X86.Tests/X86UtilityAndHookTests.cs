@@ -54,10 +54,12 @@ public sealed unsafe class X86UtilityAndHookTests
             .Scan("B8 80 00 00 00 A1 ?? ?? ?? ?? C3");
 
         Assert.True(scanner.Found);
+        Assert.Equal(0, scanner.CurrentOffset);
         Assert.True(scanner.TryGetManagedImmediate(out ManagedAssemblyImmediate<UInt32>? site, operand: 1));
         Assert.NotNull(site);
 
         scanner.Advance(5);
+        Assert.Equal(5, scanner.CurrentOffset);
         Assert.True(scanner.TryReadAbsoluteAddress(out UInt64 absoluteAddress, operand: 1));
         Assert.Equal(region.Address + 0x80, absoluteAddress);
         Assert.True(AssemblyUtil.TryGetPointerToDisplacement(scanner.CurrentAddress, out byte* displacement, out int size));

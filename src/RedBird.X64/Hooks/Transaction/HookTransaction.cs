@@ -287,6 +287,17 @@ public sealed class HookTransaction : IDisposable
         return handle;
     }
 
+    /// <summary>
+    /// Registers an x64 context hook and returns a fresh handle, for callers who do not keep a field.
+    /// The transaction retains the installed hook for its own lifetime, so callers may ignore the returned handle when they do not need to inspect or control that hook individually.
+    /// </summary>
+    public HookHandle<X64InlineHook> AddContextHook(
+        HookTarget target,
+        ContextHookDelegate callback,
+        ContextHookOptions? options = null,
+        [CallerArgumentExpression(nameof(callback))] string name = "")
+        => AddContextHook(new HookHandle<X64InlineHook>(), target, callback, options, name);
+
     /// <summary>Registers a function-clone hook.</summary>
     /// <param name="handle">Handle populated once the clone is live.</param>
     /// <param name="target">Pattern, address, RVA or export identifying the function entry point.</param>
@@ -418,7 +429,7 @@ public sealed class HookTransaction : IDisposable
     private void ThrowIfNotBuilding()
     {
         if (State != TransactionState.Building)
-            throw new InvalidOperationException($"Hook transaction '{Name}' is {State}; registrations are closed and it cannot be committed again.");
+            throw new InvalidOperationException($"Hook transaction [{Name}] is {State}; registrations are closed and it cannot be committed again.");
     }
 
     private static void ArgumentNullThrow(object? value, string parameterName)

@@ -132,7 +132,7 @@ public sealed unsafe class NativeDetour<TFunction> : IDetour<TFunction> where TF
         }
 
         State = HookState.Failed;
-        throw new NotSupportedException($"No detour scheme fits 0x{resolved:X16} for [{Name}]. The function is probably too short, or no executable memory could be placed within +/-2 GB of it.");
+        throw new NotSupportedException($"No enabled detour scheme could be prepared at 0x{resolved:X16} for [{Name}]. The preceding logs identify whether prologue selection, relocation, or near-memory allocation failed.");
     }
 
     /// <inheritdoc/>
@@ -205,10 +205,7 @@ public sealed unsafe class NativeDetour<TFunction> : IDetour<TFunction> where TF
 
             if (patchResult.RelocatedThreadCount > 0)
             {
-                _logger.LogDebug(
-                    "[{Name}] redirected {Count} suspended thread(s) from the displaced prologue into its trampoline.",
-                    Name,
-                    patchResult.RelocatedThreadCount);
+                _logger.LogDebug("[{Name}] redirected {Count} suspended thread(s) from the displaced prologue into its trampoline.", Name, patchResult.RelocatedThreadCount);
             }
 
             _logger.LogDebug("[{Name}] installed at 0x{Address:X16}.", Name, TargetAddress);
@@ -227,7 +224,6 @@ public sealed unsafe class NativeDetour<TFunction> : IDetour<TFunction> where TF
             {
                 // Something went on top after we did. Writing our saved bytes here would overwrite that layer's jump and silently unhook it while it still believes it is installed.
                 _logger.LogError("[{Name}] cannot uninstall from 0x{Address:X16}: the entry point no longer holds this detour's patch, so another layer went on top. Unhook in reverse order, or set SafeUnhook to false to restore regardless.", Name, TargetAddress);
-
                 return;
             }
 

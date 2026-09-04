@@ -192,7 +192,7 @@ public sealed class ManagedAssemblyStateManager(ILogger? logger = null) : IDispo
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to dispose '{Name}'.", entry.Name);
+                _logger.LogError(ex, "Failed to dispose [{Name}].", entry.Name);
             }
         }
     }

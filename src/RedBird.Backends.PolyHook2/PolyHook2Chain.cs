@@ -22,7 +22,7 @@ internal static class PolyHook2ChainRegistry
             {
                 if (existing is not PolyHook2Chain<TFunction> typed)
                 {
-                    throw new NotSupportedException($"PolyHook2 target 0x{layer.TargetAddress:X16} is already registered with delegate type '{existing.DelegateType.FullName}', not '{typeof(TFunction).FullName}'.");
+                    throw new NotSupportedException($"PolyHook2 target 0x{layer.TargetAddress:X16} is already registered with delegate type [{existing.DelegateType.FullName}], not [{typeof(TFunction).FullName}].");
                 }
 
                 typed.RegisterLayer(layer);
@@ -101,17 +101,20 @@ internal sealed class PolyHook2Chain<TFunction> : PolyHook2ChainRegistry.IPolyHo
                 // Publish a valid head before making that write visible to another thread.
                 Volatile.Write(ref _head, layer.Callback);
 
-                X64ManagedFunctionDetour<TFunction> physical =
-                    new(TargetAddress, _dispatcher, doAutoHook: false);
+                X64ManagedFunctionDetour<TFunction>? physical = null;
                 try
                 {
+                    // Construction loads PolyHook2's native dependencies and can itself throw.
+                    // Keep it inside the cleanup boundary so a failed first layer never leaves a published dispatcher head behind.
+                    physical = new X64ManagedFunctionDetour<TFunction>(TargetAddress, _dispatcher, doAutoHook: false);
+
                     if (!physical.Hook() || physical.Trampoline is null)
                         throw new InvalidOperationException($"PolyHook2 could not hook 0x{TargetAddress:X16}.");
                     _physical = physical;
                 }
                 catch
                 {
-                    physical.Dispose();
+                    physical?.Dispose();
                     Volatile.Write(ref _head, null);
                     throw;
                 }
@@ -169,9 +172,7 @@ internal sealed class PolyHook2Chain<TFunction> : PolyHook2ChainRegistry.IPolyHo
         }
     }
 
-    private TFunction GetHead()
-        => Volatile.Read(ref _head) ?? throw new InvalidOperationException(
-            $"PolyHook2 dispatched target 0x{TargetAddress:X16} without an active chain head.");
+    private TFunction GetHead() => Volatile.Read(ref _head) ?? throw new InvalidOperationException($"PolyHook2 dispatched target 0x{TargetAddress:X16} without an active chain head.");
 
     private void RebuildOriginalChain()
     {
@@ -186,7 +187,7 @@ internal sealed class PolyHook2Chain<TFunction> : PolyHook2ChainRegistry.IPolyHo
     private static TFunction CreateDispatcher(PolyHook2Chain<TFunction> chain)
     {
         MethodInfo invoke = typeof(TFunction).GetMethod("Invoke")
-            ?? throw new ArgumentException($"'{typeof(TFunction).FullName}' is not an invokable delegate type.");
+            ?? throw new ArgumentException($"[{typeof(TFunction).FullName}] is not an invokable delegate type.");
 
         ParameterInfo[] reflectedParameters = invoke.GetParameters();
         ParameterExpression[] parameters = new ParameterExpression[reflectedParameters.Length];
