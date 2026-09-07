@@ -94,7 +94,9 @@ public sealed class HookTransactionTests
             Label callee = assembler.CreateLabel();
 
             assembler.nop();
+            assembler.sub(rsp, 0x28);
             assembler.call(callee);
+            assembler.add(rsp, 0x28);
             assembler.ret();
 
             assembler.Label(ref callee);
@@ -110,7 +112,7 @@ public sealed class HookTransactionTests
         using HookTransaction tx = Transaction(caller);
         DetourHandle<TestDelegates.NullaryInt> handle = new();
         HookTarget target = HookTarget.FromRelativeCall(
-            "E8 ?? ?? ?? ?? C3 B8 07 00 00 00");
+            "E8 ?? ?? ?? ?? 48 83 C4 28 C3 B8 07 00 00 00");
 
         tx.AddDetour(handle, target, () => 99);
         CommitResult result = tx.Commit();
@@ -118,8 +120,8 @@ public sealed class HookTransactionTests
         Assert.True(result.IsCompleteSuccess);
         Assert.Equal(HookTargetKind.RelativeCall, target.Kind);
         Assert.True(target.RequiresScan);
-        Assert.Equal(caller.Address + 7, handle.ResolvedAddress);
-        Assert.Equal((byte)0xE8, Marshal.ReadByte((IntPtr)(caller.Address + 1)));
+        Assert.Equal(caller.Address + 15, handle.ResolvedAddress);
+        Assert.Equal((byte)0xE8, Marshal.ReadByte((IntPtr)(caller.Address + 5)));
         Assert.Equal(99, call());
         Assert.Equal(7, handle.Original());
     }
