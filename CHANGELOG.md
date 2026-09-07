@@ -1,3 +1,5 @@
+## [1.1.0](https://gitlab.com/Rawra/redbird/compare/v1.0.0...v1.1.0) (2026-09-07)
+
 ## 1.0.0 (2026-09-04)
 
 # Changelog
