@@ -21,7 +21,7 @@ It offers X64 and X86 detour engines, transactional pattern-based hooks, executa
 - Managed native X64 and X86 detour backends with relocated-original trampolines.
 - Safe executable-code patching on Windows X64/X86 and Linux X64: peer threads are parked while instruction pointers inside a replaced prologue are moved to their trampoline equivalents.
 - Hook chaining with safe reverse-order unhooking.
-- Pattern (wildcard AOB), address, RVA, and export targets with transactional commit and rollback policies.
+- Pattern (wildcard AOB), relative-call destination, address, RVA, and export targets with transactional commit and rollback policies.
 - Context hooks, inline hooks, function clones, stateful assembly patches, and instruction walkers.
 - Public runtime-assembled executable functions for X64 and X86.
 - Supports X86 cdecl, stdcall, fastcall, thiscall, GCC, Pascal, and custom register/stack layouts.
@@ -172,6 +172,19 @@ transaction.AddContextHook(
     HookTarget.FromPattern("48 89 5C 24 ?? 57", offset: 6),
     OnContext);
 ```
+
+When only a call site has a stable signature, resolve the direct relative `CALL` destination explicitly.
+This hooks the called function, while leaving the call instruction itself intact:
+
+```csharp
+transaction.AddDetour(
+    createTribeHook,
+    HookTarget.FromRelativeCall("E8 ?? ?? ?? ?? 48 63 F8 89 7C 24 ?? 85 C0"),
+    OnCreateTribe);
+```
+
+Use `callOffset` when the signature begins before the call. Indirect calls are rejected.
+`FromPattern` continues to mean that the matched address itself is the hook target.
 
 When a callback needs `Original`, initialize its persistent handle before registration. Export
 targets do not change that requirement:

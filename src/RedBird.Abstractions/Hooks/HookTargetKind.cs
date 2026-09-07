@@ -4,14 +4,20 @@
 public enum HookTargetKind
 {
     /// <summary>AOB pattern, scanned inside the transaction's region.</summary>
-    Pattern,
+    Pattern = 0,
 
     /// <summary>Absolute virtual address, used as-is.</summary>
-    Address,
+    Address = 1,
 
     /// <summary>Offset from the region's base address (i.e. an RVA).</summary>
-    RelativeVirtualAddress,
+    RelativeVirtualAddress = 2,
 
     /// <summary>Exported symbol, resolved through the platform loader.</summary>
-    Export,
+    Export = 3,
+
+    /// <summary>
+    /// AOB pattern identifying a direct relative <c>CALL</c>; the called function,
+    /// rather than the call instruction itself, is the resolved hook target.
+    /// </summary>
+    RelativeCall = 4,
 }

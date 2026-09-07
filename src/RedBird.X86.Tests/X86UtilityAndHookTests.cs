@@ -201,6 +201,48 @@ public sealed unsafe class X86UtilityAndHookTests
         Assert.Equal(7, function(3, 4));
     }
 
+    [Fact]
+    public void Transaction_ResolvesTheCalleeOfARelativeCallPattern()
+    {
+        using ExecutableX86Function caller = ExecutableX86Function.Create(assembler =>
+        {
+            Label callee = assembler.CreateLabel();
+
+            assembler.nop();
+            assembler.call(callee);
+            assembler.ret();
+
+            assembler.Label(ref callee);
+            assembler.mov(eax, 7);
+            for (int index = 0; index < 24; index++)
+                assembler.nop();
+            assembler.ret();
+        });
+
+        NullaryInt call = caller.GetDelegate<NullaryInt>();
+        Assert.Equal(7, call());
+
+        using ScanRegion scanRegion = ScanRegion.FromPointer(caller.EntryPoint, caller.CodeLength);
+        using HookTransaction transaction = new(
+            scanRegion,
+            options: new HookTransactionOptions { OwnsHooks = true });
+
+        RedBird.Abstractions.Hooks.Transaction.DetourHandle<NullaryInt> handle = new();
+        transaction.AddDetour(
+            handle,
+            HookTarget.FromRelativeCall(
+                "90 E8 ?? ?? ?? ?? C3 B8 07 00 00 00",
+                callOffset: 1),
+            () => 99);
+
+        transaction.Commit();
+
+        Assert.Equal(caller.Address + 7, handle.ResolvedAddress);
+        Assert.Equal((byte)0xE8, Marshal.ReadByte((IntPtr)(caller.Address + 1)));
+        Assert.Equal(99, call());
+        Assert.Equal(7, handle.Original());
+    }
+
     private sealed class ExecutableRegion : IDisposable
     {
         public const int DefaultSize = 4096;

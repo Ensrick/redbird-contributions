@@ -1,3 +1,4 @@
+using Iced.Intel;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -161,6 +162,7 @@ internal static class HookCommitPipeline
         foreach (HookDescriptor descriptor in descriptors)
         {
             descriptor.ResolvedAddress = 0;
+            descriptor.ResolutionFailure = null;
 
             if (!descriptor.Target.RequiresScan || descriptor.Pattern is null)
                 continue;
@@ -187,8 +189,25 @@ internal static class HookCommitPipeline
                 if (offsets[i] < 0)
                     continue;
 
+                HookDescriptor descriptor = scanTargets[i];
+                HookTarget target = descriptor.Target;
+
+                if (target.Kind == HookTargetKind.RelativeCall)
+                {
+                    if (!TryResolveRelativeCall(region, offsets[i], target.Offset, out UInt64 callAddress, out UInt64 callTarget, out string failure))
+                    {
+                        descriptor.ResolutionFailure = failure;
+                        continue;
+                    }
+
+                    descriptor.ResolvedAddress = callTarget;
+                    found++;
+                    logger.LogDebug("[{Name}] relative CALL at 0x{CallAddress:X8} resolved to 0x{TargetAddress:X8}.", descriptor.Name, callAddress, callTarget);
+                    continue;
+                }
+
+                descriptor.ResolvedAddress = ApplyOffset(region.ToAddress(offsets[i]), target.Offset);
                 found++;
-                scanTargets[i].ResolvedAddress = ApplyOffset(region.ToAddress(offsets[i]), scanTargets[i].Target.Offset);
             }
 
             logger.LogInformation("Scanned {PatternCount} patterns across {RegionSize} bytes in one pass: {Found} resolved, {Missing} missing, {Elapsed}ms.", patterns.Count, region.Length, found, patterns.Count - found, scanMilliseconds);
@@ -201,6 +220,7 @@ internal static class HookCommitPipeline
             switch (target.Kind)
             {
                 case HookTargetKind.Pattern:
+                case HookTargetKind.RelativeCall:
                     break; // Already handled above.
 
                 case HookTargetKind.Address:
@@ -228,12 +248,77 @@ internal static class HookCommitPipeline
     private static UInt64 ApplyOffset(UInt64 address, int offset)
         => offset == 0 ? address : unchecked((UInt64)((long)address + offset));
 
-    private static string DescribeResolveFailure(HookDescriptor descriptor) => descriptor.Target.Kind switch
+    private static bool TryResolveRelativeCall(
+        ScanRegion region,
+        long patternOffset,
+        int callOffset,
+        out UInt64 callAddress,
+        out UInt64 callTarget,
+        out string failure)
     {
-        HookTargetKind.Pattern => $"Pattern not found: {descriptor.Target.Text}",
-        HookTargetKind.Export => $"Export not found: {descriptor.Target.Text}",
-        _ => $"Target resolved to a null address: {descriptor.Target}",
-    };
+        callAddress = 0;
+        callTarget = 0;
+        failure = string.Empty;
+
+        long instructionOffset;
+        try
+        {
+            instructionOffset = checked(patternOffset + callOffset);
+        }
+        catch (OverflowException)
+        {
+            failure = $"Relative CALL offset overflowed for pattern match +{patternOffset} and callOffset {callOffset}.";
+            return false;
+        }
+
+        if (instructionOffset < 0 || instructionOffset >= region.Length)
+        {
+            failure = $"Relative CALL offset {callOffset} from pattern match +{patternOffset} falls outside the scan region.";
+            return false;
+        }
+
+        callAddress = region.ToAddress(instructionOffset);
+        int available = Math.Min(15, region.Length - (int)instructionOffset);
+        byte[] encoded = region.Span.Slice((int)instructionOffset, available).ToArray();
+        Decoder decoder = Decoder.Create(32, new ByteArrayCodeReader(encoded), callAddress);
+        Instruction instruction = decoder.Decode();
+
+        if (decoder.LastError != DecoderError.None || instruction.IsInvalid)
+        {
+            failure = $"Could not decode the expected direct relative CALL at 0x{callAddress:X8}.";
+            return false;
+        }
+
+        if (instruction.FlowControl != FlowControl.Call ||
+            instruction.Op0Kind is not (OpKind.NearBranch16 or OpKind.NearBranch32))
+        {
+            failure = $"Expected a direct relative CALL at 0x{callAddress:X8}, but decoded {instruction.Mnemonic} with operand kind {instruction.Op0Kind}.";
+            return false;
+        }
+
+        callTarget = instruction.NearBranchTarget & UInt32.MaxValue;
+        if (callTarget == 0)
+        {
+            failure = $"Direct relative CALL at 0x{callAddress:X8} resolved to the null address.";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string DescribeResolveFailure(HookDescriptor descriptor)
+    {
+        if (!string.IsNullOrEmpty(descriptor.ResolutionFailure))
+            return descriptor.ResolutionFailure!;
+
+        return descriptor.Target.Kind switch
+        {
+            HookTargetKind.Pattern => $"Pattern not found: {descriptor.Target.Text}",
+            HookTargetKind.RelativeCall => $"Relative CALL pattern not found: {descriptor.Target.Text}",
+            HookTargetKind.Export => $"Export not found: {descriptor.Target.Text}",
+            _ => $"Target resolved to a null address: {descriptor.Target}",
+        };
+    }
 
     /// <summary>
     /// Undoes a partially applied commit, newest first, so overlapping patches unwind in the

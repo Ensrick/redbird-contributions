@@ -26,7 +26,7 @@ HookBackends.Default = NativeDetourBackend.Instance;
 
 Transactions prepare hooks before installation, share pattern scans, and apply a consistent failure policy. 
 
-Targets can be absolute addresses, RVAs, exports, or byte patterns.
+Targets can be absolute addresses, RVAs, exports, byte patterns, or the destination of a direct relative call identified by a byte pattern.
 
 ```csharp
 using ScanRegion region = ScanRegion.FromModule(moduleHandle);
@@ -56,6 +56,29 @@ be ignored when no individual control or status inspection is needed.
 
 For lower-level scans, `DataScanner.CurrentAddress` is the resolved virtual address and
 `DataScanner.CurrentOffset` is its signed byte offset from `ScanRegion.BaseAddress`.
+
+### Relative-call targets
+
+Some functions have no stable entry-point signature, while one of their callers does. 
+Use `FromRelativeCall` to scan for that call site and detour the function reached by its direct relative `CALL`:
+
+```csharp
+transaction.AddDetour(
+    createTribeHook,
+    HookTarget.FromRelativeCall(
+        "E8 ?? ?? ?? ?? 48 63 F8 89 7C 24 ?? 85 C0"),
+    OnCreateTribe);
+```
+
+If the signature begins before the call instruction, provide its signed byte offset:
+
+```csharp
+HookTarget target = HookTarget.FromRelativeCall(pattern, callOffset: 12);
+```
+
+This mode accepts only decoded direct relative calls. An indirect call fails during the resolve
+phase with a diagnostic identifying the matched instruction. Ordinary `FromPattern` targets keep
+their existing behavior and resolve to the matched address plus their optional offset.
 
 ### Export targets and handles
 

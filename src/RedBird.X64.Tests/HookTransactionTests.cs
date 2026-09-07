@@ -87,6 +87,67 @@ public sealed class HookTransactionTests
     }
 
     [Fact]
+    public void Commit_ResolvesTheCalleeOfARelativeCallPattern()
+    {
+        using ExecutableFunction caller = ExecutableFunction.Create(assembler =>
+        {
+            Label callee = assembler.CreateLabel();
+
+            assembler.nop();
+            assembler.call(callee);
+            assembler.ret();
+
+            assembler.Label(ref callee);
+            assembler.mov(eax, 7);
+            for (int index = 0; index < 24; index++)
+                assembler.nop();
+            assembler.ret();
+        });
+
+        TestDelegates.NullaryInt call = caller.GetDelegate<TestDelegates.NullaryInt>();
+        Assert.Equal(7, call());
+
+        using HookTransaction tx = Transaction(caller);
+        DetourHandle<TestDelegates.NullaryInt> handle = new();
+        HookTarget target = HookTarget.FromRelativeCall(
+            "E8 ?? ?? ?? ?? C3 B8 07 00 00 00");
+
+        tx.AddDetour(handle, target, () => 99);
+        CommitResult result = tx.Commit();
+
+        Assert.True(result.IsCompleteSuccess);
+        Assert.Equal(HookTargetKind.RelativeCall, target.Kind);
+        Assert.True(target.RequiresScan);
+        Assert.Equal(caller.Address + 7, handle.ResolvedAddress);
+        Assert.Equal((byte)0xE8, Marshal.ReadByte((IntPtr)(caller.Address + 1)));
+        Assert.Equal(99, call());
+        Assert.Equal(7, handle.Original());
+    }
+
+    [Fact]
+    public void Commit_RejectsARelativeCallTargetWhenTheMatchedInstructionIsNotACall()
+    {
+        using ExecutableFunction target = TestFunctions.Constant(0x1234);
+        TestDelegates.NullaryInt call = target.GetDelegate<TestDelegates.NullaryInt>();
+        using HookTransaction tx = Transaction(target);
+
+        DetourHandle<TestDelegates.NullaryInt> handle = new();
+        tx.AddDetour(
+            handle,
+            HookTarget.FromRelativeCall("B8 34 12 00 00"),
+            () => 99,
+            "notACall");
+
+        CommitResult result = tx.Commit();
+
+        HookFailure failure = Assert.Single(result.Failures);
+        Assert.Equal(HookFailurePhase.Resolve, failure.Phase);
+        Assert.Contains("Expected a direct relative CALL", failure.Message, StringComparison.Ordinal);
+        Assert.False(handle.Success);
+        Assert.Equal(0x1234, call());
+    }
+
+    [Fact]
     public void Commit_ReportsAMissingPatternWithoutAffectingTheRest()
     {
         using ExecutableFunction target = TestFunctions.Add();

@@ -44,6 +44,9 @@ internal abstract class HookDescriptor(string name, HookTarget target)
     /// <summary>Address produced by the resolve phase.</summary>
     public UInt64 ResolvedAddress { get; set; }
 
+    /// <summary>Specific reason resolution failed after a pattern matched, when available.</summary>
+    public string? ResolutionFailure { get; set; }
+
     /// <summary>The built hook, available from the prepare phase onwards.</summary>
     public IHook? Hook { get; protected set; }
 

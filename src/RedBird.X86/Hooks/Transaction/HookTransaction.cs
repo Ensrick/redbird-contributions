@@ -125,7 +125,7 @@ public sealed class HookTransaction : IDisposable
     /// <summary>Registers a full-function detour.</summary>
     /// <typeparam name="TFunction">Delegate matching the target's signature.</typeparam>
     /// <param name="handle">Handle populated once the detour is live.</param>
-    /// <param name="target">Pattern, address, RVA or export.</param>
+    /// <param name="target">Pattern, relative-call destination, address, RVA or export.</param>
     /// <param name="callback">Managed replacement.</param>
     /// <param name="name">Defaults to the handle's expression text.</param>
     public DetourHandle<TFunction> AddDetour<TFunction>(
@@ -190,7 +190,7 @@ public sealed class HookTransaction : IDisposable
 
     /// <summary>Registers a raw inline hook whose stub body you generate yourself.</summary>
     /// <param name="handle">Handle populated once the hook is live.</param>
-    /// <param name="target">Pattern, address, RVA or export.</param>
+    /// <param name="target">Pattern, relative-call destination, address, RVA or export.</param>
     /// <param name="generator">Emits the stub body via Iced.</param>
     /// <param name="hookSize">Minimum bytes to displace; clamped to at least five.</param>
     /// <param name="name">Defaults to the handle's expression text.</param>
@@ -221,7 +221,7 @@ public sealed class HookTransaction : IDisposable
     /// target's instructions, overwriting them, with no stub or return path.
     /// </summary>
     /// <param name="handle">Handle populated once the patch is live.</param>
-    /// <param name="target">Pattern, address, RVA or export.</param>
+    /// <param name="target">Pattern, relative-call destination, address, RVA or export.</param>
     /// <param name="generator">Emits the replacement code via Iced, encoded for the target address.</param>
     /// <param name="maxByteCount">
     /// Maximum bytes the patch may overwrite, or <c>0</c> for no limit. When set and the body (rounded up to the next instruction boundary) does not fit, the transaction fails this hook during the prepare phase, before any byte of the target is written.
@@ -256,7 +256,7 @@ public sealed class HookTransaction : IDisposable
     /// Registers an in-place patch that writes <paramref name="bytes"/> verbatim over the target, for pre-assembled or hand-written machine code (for example a run of <c>NOP</c>s that neuters a check).
     /// </summary>
     /// <param name="handle">Handle populated once the patch is live.</param>
-    /// <param name="target">Pattern, address, RVA or export.</param>
+    /// <param name="target">Pattern, relative-call destination, address, RVA or export.</param>
     /// <param name="bytes">Raw machine code to write. Copied at registration.</param>
     /// <param name="maxByteCount">Maximum bytes the patch may overwrite, or <c>0</c> for no limit.</param>
     /// <param name="name">Defaults to the handle's expression text.</param>
@@ -277,7 +277,7 @@ public sealed class HookTransaction : IDisposable
 
     /// <summary>Registers a context hook that hands your callback the captured CPU state.</summary>
     /// <param name="handle">Handle populated once the hook is live.</param>
-    /// <param name="target">Pattern, address, RVA or export.</param>
+    /// <param name="target">Pattern, relative-call destination, address, RVA or export.</param>
     /// <param name="callback">Receives a pointer to the captured context.</param>
     /// <param name="options">Register set, displacement placement, error handling.</param>
     /// <param name="name">Defaults to the handle's expression text.</param>
@@ -305,7 +305,7 @@ public sealed class HookTransaction : IDisposable
 
     /// <summary>Registers a function-clone hook.</summary>
     /// <param name="handle">Handle populated once the clone is live.</param>
-    /// <param name="target">Pattern, address, RVA or export identifying the function entry point.</param>
+    /// <param name="target">Pattern, relative-call destination, address, RVA or export identifying the function entry point.</param>
     /// <param name="patches">Patch sites applied to the clone.</param>
     /// <param name="scanOptions">Optional 32-bit function-boundary limits.</param>
     /// <param name="name">Defaults to the handle's expression text.</param>
