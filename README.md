@@ -205,18 +205,21 @@ If no persistent handle is needed, omit the first argument and keep the handle r
 `CurrentOffset` reports the signed byte offset from the associated `ScanRegion.BaseAddress`, which is useful when recording an RVA. 
 Check `Found` first because both a failed scan and a successful match at the region base report an offset of zero.
 
-## X64 switch and FSM dispatches
+## X86 and X64 switch/FSM dispatches
 
-`SwitchDispatchDecoder` resolves supported compiler jump tables back into selector values, handler addresses, shared/default blocks, and half-open linear boundaries. 
-A case block can create an `InstructionWalker` that is automatically capped before the next distinct handler:
+`SwitchDispatchDecoder` resolves supported compiler jump tables back into selector values, handler addresses, shared/default blocks, and half-open linear boundaries. A case block can create an `InstructionWalker` that is automatically capped before the next distinct handler:
 
 ```csharp
 SwitchDispatch dispatch = SwitchDispatchDecoder.Decode(region, functionAddress);
 SwitchCaseBlock state65 = dispatch.GetCase(0x65);
 InstructionWalker walker = state65.CreateWalker(walkerConfig, logger);
 ```
-See the [switch-dispatch guide](docs/articles/switch-dispatches.md) for supported shapes and boundary caveats.
 
+The x64 implementation handles direct signed table-relative layouts commonly emitted by GCC and Clang, plus direct or byte-remapped unsigned image-relative layouts used by MSVC. 
+
+The x86 package handles absolute pointer tables and statically based relative tables, with optional byte remapping.
+
+See the [switch-dispatch guide](docs/articles/switch-dispatches.md) for supported shapes and boundary caveats.
 ## Platform support
 
 | Feature | Windows X64 | Windows X86 | Linux X64 | Linux X86 |
