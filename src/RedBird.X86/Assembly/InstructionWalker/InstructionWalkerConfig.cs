@@ -1,3 +1,5 @@
+using System;
+
 namespace RedBird.X86.Assembly.InstructionWalker;
 
 /// <summary>
@@ -22,10 +24,15 @@ public class InstructionWalkerConfig
     public int MaxInstructions { get; set; } = 1000;
 
     /// <summary>
+    /// Optional exclusive address at which the walk must stop. Zero uses normal function-end
+    /// detection. A switch-case block supplies this automatically from its detected boundary.
+    /// </summary>
+    public UInt64 EndAddressExclusive { get; set; }
+
+    /// <summary>
     /// How the end of the function is recognised.
     /// <para>
-    /// Defaults to <see cref="FunctionEndDetection.FirstInt3"/> to preserve the behaviour existing walk configs were written against, in particular
-    /// <see cref="InstructionWalkerStartMode.End"/>, whose anchor is "the first <c>INT3</c>".
+    /// Defaults to <see cref="FunctionEndDetection.FirstInt3"/> to preserve the behaviour existing walk configs were written against, in particular <see cref="InstructionWalkerStartMode.End"/>, whose anchor is "the first <c>INT3</c>".
     /// Switch to <see cref="FunctionEndDetection.ReachableTerminator"/> when a walk stops short because the compiler emitted an <c>int3</c> after a <c>noreturn</c> call in the middle of the function.
     /// </para>
     /// </summary>
@@ -37,6 +44,7 @@ public class InstructionWalkerConfig
         Bitness = Bitness,
         MaxBytes = MaxReadLength,
         MaxInstructions = MaxInstructions,
+        EndAddressExclusive = EndAddressExclusive,
         EndDetection = EndDetection,
 
         // Walk rules anchored on End mode look for the terminator instruction itself, so padding

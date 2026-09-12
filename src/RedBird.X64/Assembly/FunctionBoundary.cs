@@ -27,16 +27,31 @@ public static unsafe class FunctionBoundary
         if (options.MaxInstructions <= 0)
             throw new ArgumentOutOfRangeException(nameof(options), "Function scan instruction limit must be positive.");
 
-        MemoryCodeReader reader = new((byte*)address, options.MaxBytes);
+        int maximumBytes = options.MaxBytes;
+        bool explicitBoundaryLimitsScan = false;
+        if (options.EndAddressExclusive != 0)
+        {
+            if (options.EndAddressExclusive <= address)
+                throw new ArgumentOutOfRangeException(nameof(options), "The exclusive end address must be greater than the start address.");
+
+            UInt64 distance = options.EndAddressExclusive - address;
+            if (distance <= (UInt64)maximumBytes)
+            {
+                maximumBytes = checked((int)distance);
+                explicitBoundaryLimitsScan = true;
+            }
+        }
+
+        MemoryCodeReader reader = new((byte*)address, maximumBytes);
         Decoder decoder = Decoder.Create(options.Bitness, reader, address);
 
         List<Instruction> instructions = new(256);
-        UInt64 limit = address + (UInt64)options.MaxBytes;
+        UInt64 limit = address + (UInt64)maximumBytes;
         UInt64 furthestTarget = address;
         int byteCount = 0;
         bool truncated = true;
 
-        while (byteCount < options.MaxBytes && instructions.Count < options.MaxInstructions)
+        while (byteCount < maximumBytes && instructions.Count < options.MaxInstructions)
         {
             Instruction instruction = decoder.Decode();
             if (decoder.LastError != DecoderError.None || instruction.IsInvalid)
@@ -44,6 +59,12 @@ public static unsafe class FunctionBoundary
 
             instructions.Add(instruction);
             byteCount += instruction.Length;
+
+            if (explicitBoundaryLimitsScan && instruction.NextIP >= options.EndAddressExclusive)
+            {
+                truncated = false;
+                break;
+            }
 
             if (options.EndDetection == FunctionEndDetection.FirstInt3)
             {
@@ -71,6 +92,9 @@ public static unsafe class FunctionBoundary
             }
         }
 
+        if (explicitBoundaryLimitsScan && byteCount >= maximumBytes)
+            truncated = false;
+
         if (truncated)
         {
             logger?.LogWarning("Disassembly of 0x{Address:X16} stopped at a limit ({ByteCount} bytes, {InstructionCount} instructions) without reaching a function terminator. Results are incomplete.", address, byteCount, instructions.Count);
@@ -82,11 +106,9 @@ public static unsafe class FunctionBoundary
         return new FunctionDisassembly(instructions, address, byteCount, truncated);
     }
 
-    private static bool IsNearBranch(in Instruction instruction) => instruction.Op0Kind switch
-    {
-        OpKind.NearBranch16 or OpKind.NearBranch32 or OpKind.NearBranch64 => true,
-        _ => false,
-    };
+    private static bool IsNearBranch(in Instruction instruction)
+        => (instruction.FlowControl is FlowControl.ConditionalBranch or FlowControl.UnconditionalBranch) &&
+           instruction.Op0Kind is (OpKind.NearBranch16 or OpKind.NearBranch32 or OpKind.NearBranch64);
 
     private static bool IsTerminator(in Instruction instruction)
     {

@@ -1,3 +1,5 @@
+using System;
+
 namespace RedBird.X86.Assembly;
 
 /// <summary>Limits and strategy for <see cref="FunctionBoundary.Disassemble"/>.</summary>
@@ -16,6 +18,11 @@ public sealed class FunctionScanOptions
 
     /// <summary>Hard ceiling on decoded instructions.</summary>
     public int MaxInstructions { get; init; } = 8_000;
+
+    /// <summary>
+    /// Optional exclusive address at which decoding must stop. Zero leaves the end unconstrained.
+    /// </summary>
+    public UInt64 EndAddressExclusive { get; init; }
 
     /// <summary>Termination strategy.</summary>
     public FunctionEndDetection EndDetection { get; init; } = FunctionEndDetection.ReachableTerminator;
