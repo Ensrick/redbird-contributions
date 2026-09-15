@@ -205,6 +205,36 @@ If no persistent handle is needed, omit the first argument and keep the handle r
 `CurrentOffset` reports the signed byte offset from the associated `ScanRegion.BaseAddress`, which is useful when recording an RVA. 
 Check `Found` first because both a failed scan and a successful match at the region base report an offset of zero.
 
+### Persistent AOB cache
+
+Transactions can persist pattern matches as region-relative virtual addresses and reuse them on the next run:
+
+```csharp
+using RedBird.Core.Memory.Scanners;
+
+string cacheDirectory = "MyCacheDir";
+
+var options = new HookTransactionOptions
+{
+    Backend = NativeDetourBackend.Instance,
+    AobCache = new AobCacheOptions(Path.Combine(cacheDirectory, "game-module.aobcache.json")),
+};
+
+using var transaction = new HookTransaction(region, options: options);
+```
+
+The parent directory is created on the first write. The compact JSON file contains a format version,
+the scan-region length, an XXH64 checksum, and an AOB-to-RVA map. 
+
+On a checksum match, cached entries are also checked against the current bytes before use. 
+A complete cache hit avoids the multi-pattern scan; partial hits scan only the missing patterns and then update the file. Missing patterns are cached too.
+
+Use one cache file per module or scan region. A changed checksum, malformed file, unsupported format,
+or invalid RVA causes a safe rescan. Cache I/O errors are logged and never fail the hook transaction.
+
+`AobCacheOptions.Store` defaults to `JsonAobCacheStore.Instance`. Implement `IAobCacheStore` and set
+that property when a binary format such as MessagePack or otherwise is preferable.
+
 ## X86 and X64 switch/FSM dispatches
 
 `SwitchDispatchDecoder` resolves supported compiler jump tables back into selector values, handler addresses, shared/default blocks, and half-open linear boundaries. A case block can create an `InstructionWalker` that is automatically capped before the next distinct handler:

@@ -57,6 +57,36 @@ be ignored when no individual control or status inspection is needed.
 For lower-level scans, `DataScanner.CurrentAddress` is the resolved virtual address and
 `DataScanner.CurrentOffset` is its signed byte offset from `ScanRegion.BaseAddress`.
 
+### Persistent AOB cache
+
+Transactions can persist pattern matches as region-relative virtual addresses and reuse them on the next run:
+
+```csharp
+using RedBird.Core.Memory.Scanners;
+
+string cacheDirectory = "MyCacheDir";
+
+var options = new HookTransactionOptions
+{
+    Backend = NativeDetourBackend.Instance,
+    AobCache = new AobCacheOptions(Path.Combine(cacheDirectory, "game-module.aobcache.json")),
+};
+
+using var transaction = new HookTransaction(region, options: options);
+```
+
+The parent directory is created on the first write. The compact JSON file contains a format version,
+the scan-region length, an XXH64 checksum, and an AOB-to-RVA map. 
+
+On a checksum match, cached entries are also checked against the current bytes before use. 
+A complete cache hit avoids the multi-pattern scan; partial hits scan only the missing patterns and then update the file. Missing patterns are cached too.
+
+Use one cache file per module or scan region. A changed checksum, malformed file, unsupported format,
+or invalid RVA causes a safe rescan. Cache I/O errors are logged and never fail the hook transaction.
+
+`AobCacheOptions.Store` defaults to `JsonAobCacheStore.Instance`. Implement `IAobCacheStore` and set
+that property when a binary format such as MessagePack or otherwise is preferable.
+
 ### Relative-call targets
 
 Some functions have no stable entry-point signature, while one of their callers does. 

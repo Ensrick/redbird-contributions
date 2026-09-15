@@ -1,6 +1,7 @@
 using RedBird.Abstractions.Hooks;
 using RedBird.Abstractions.Hooks.Transaction;
 using RedBird.Backends.NativeX86;
+using RedBird.Core.Memory.Scanners;
 
 namespace RedBird.X86.Hooks.Transaction;
 
@@ -23,6 +24,11 @@ public sealed record HookTransactionOptions
 
     /// <summary>Partition the AOB sweep across cores when the region is large enough to justify it.</summary>
     public bool ParallelScan { get; init; } = true;
+
+    /// <summary>
+    /// Optional checksum-validated on-disk AOB-to-RVA cache. A valid hit bypasses the pattern scan.
+    /// </summary>
+    public AobCacheOptions? AobCache { get; init; }
 
     /// <summary>
     /// When false, <c>Commit</c> resolves and prepares everything but leaves the target's code untouched, so a later <c>EnableAll</c> flips the whole batch on with no allocation,

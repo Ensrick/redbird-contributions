@@ -175,13 +175,9 @@ internal static class HookCommitPipeline
 
         if (patterns.Count > 0)
         {
-            Stopwatch scanWatch = Stopwatch.StartNew();
-
-            long[] offsets = new long[patterns.Count];
-            MultiPatternScanner.FindAll(region.Span, patterns, offsets, options.ParallelScan);
-
-            scanWatch.Stop();
-            scanMilliseconds = scanWatch.ElapsedMilliseconds;
+            AobCacheResolution resolution = AobCacheResolver.Resolve(region, patterns, options.AobCache, options.ParallelScan, logger);
+            long[] offsets = resolution.Offsets;
+            scanMilliseconds = resolution.ScanMilliseconds;
 
             int found = 0;
             for (int i = 0; i < offsets.Length; i++)
@@ -210,7 +206,11 @@ internal static class HookCommitPipeline
                 found++;
             }
 
-            logger.LogInformation("Scanned {PatternCount} patterns across {RegionSize} bytes in one pass: {Found} resolved, {Missing} missing, {Elapsed}ms.", patterns.Count, region.Length, found, patterns.Count - found, scanMilliseconds);
+            if (resolution.CacheHitCount > 0)
+                logger.LogInformation("Loaded {CacheHitCount} of {PatternCount} AOB results from cache.", resolution.CacheHitCount, patterns.Count);
+
+            if (resolution.ScannedPatternCount > 0)
+                logger.LogInformation("Scanned {ScannedPatternCount} of {PatternCount} patterns across {RegionSize} bytes in one pass: {Found} total resolved, {Missing} missing, {Elapsed}ms.", resolution.ScannedPatternCount, patterns.Count, region.Length, found, patterns.Count - found, scanMilliseconds);
         }
 
         foreach (HookDescriptor descriptor in descriptors)

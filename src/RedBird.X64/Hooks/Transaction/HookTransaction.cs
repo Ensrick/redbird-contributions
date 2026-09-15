@@ -53,7 +53,7 @@ public sealed class HookTransaction : IDisposable
     /// <summary>Creates a transaction over <paramref name="region"/>.</summary>
     /// <param name="region">Memory to scan, plus the base address its offsets are relative to.</param>
     /// <param name="loggerFactory">Optional; hooks get a category logger derived from it.</param>
-    /// <param name="options">Failure policy, detour backend, install timing.</param>
+    /// <param name="options">Failure policy, detour backend, AOB caching and install timing.</param>
     /// <param name="name">Diagnostic label, defaults to the caller's member name.</param>
     public HookTransaction(
         ScanRegion region,
