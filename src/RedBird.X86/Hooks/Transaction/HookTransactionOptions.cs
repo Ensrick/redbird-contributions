@@ -26,7 +26,7 @@ public sealed record HookTransactionOptions
     public bool ParallelScan { get; init; } = true;
 
     /// <summary>
-    /// Optional checksum-validated on-disk AOB-to-RVA cache. A valid hit bypasses the pattern scan.
+    /// Optional on-disk AOB-to-RVA cache. A hit bypasses the pattern scan without validation.
     /// </summary>
     public AobCacheOptions? AobCache { get; init; }
 

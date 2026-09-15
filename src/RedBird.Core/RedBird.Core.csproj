@@ -11,7 +11,6 @@
   <ItemGroup>
     <PackageReference Include="Iced" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-    <PackageReference Include="System.IO.Hashing" />
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" />
     <PackageReference Include="System.Text.Json" Condition="'$(TargetFramework)' == 'net48'" />
   </ItemGroup>
@@ -21,7 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
-  <!--
+    <!--
     Replace the SDK's automatically discovered None item with an explicit package item.
 
     Remove prevents the same file from being included twice. 

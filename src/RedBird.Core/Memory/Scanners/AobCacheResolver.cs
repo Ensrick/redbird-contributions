@@ -2,14 +2,13 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Globalization;
-using System.IO.Hashing;
+using RedBird.Core.Memory;
 
 namespace RedBird.Core.Memory.Scanners;
 
 /// <summary>
-/// Resolves patterns through a checksum-validated cache. An instance reuses the loaded document and
-/// region checksum across a sequence of standalone scanner calls.
+/// Resolves patterns through a persistent cache. Cached offsets are authoritative and are not
+/// validated against the current scan region.
 /// </summary>
 internal sealed class AobCacheResolver
 {
@@ -103,16 +102,10 @@ internal sealed class AobCacheResolver
 
         if (_document.AllEntries.TryGetValue(pattern.Source, out long[]? cachedOffsets))
         {
-            if (IsValidCompleteEntrySet(_region.Span, pattern, cachedOffsets))
-            {
-                int count = Math.Min(limit, cachedOffsets.Length);
-                long[] result = new long[count];
-                Array.Copy(cachedOffsets, result, count);
-                return new AobCacheAllResolution(result, cacheHit: true, complete: count == cachedOffsets.Length, scanMilliseconds: 0);
-            }
-
-            _document.AllEntries.Remove(pattern.Source);
-            _document.Entries.Remove(pattern.Source);
+            int count = Math.Min(limit, cachedOffsets.Length);
+            long[] result = new long[count];
+            Array.Copy(cachedOffsets, result, count);
+            return new AobCacheAllResolution(result, cacheHit: true, complete: count == cachedOffsets.Length, scanMilliseconds: 0);
         }
 
         if (_document.Entries.TryGetValue(pattern.Source, out long cachedFirst) && cachedFirst == -1)
@@ -132,21 +125,15 @@ internal sealed class AobCacheResolver
 
     private bool TryGetFirstCachedOffset(CompiledPattern pattern, out long offset)
     {
-        if (_document!.Entries.TryGetValue(pattern.Source, out offset) &&
-            IsValidFirstEntry(_region.Span, pattern, offset))
-        {
+        if (_document!.Entries.TryGetValue(pattern.Source, out offset))
             return true;
-        }
 
-        if (_document.AllEntries.TryGetValue(pattern.Source, out long[]? completeOffsets) &&
-            IsValidCompleteEntrySet(_region.Span, pattern, completeOffsets))
+        if (_document.AllEntries.TryGetValue(pattern.Source, out long[]? completeOffsets))
         {
             offset = completeOffsets.Length == 0 ? -1 : completeOffsets[0];
             return true;
         }
 
-        _document.Entries.Remove(pattern.Source);
-        _document.AllEntries.Remove(pattern.Source);
         offset = -1;
         return false;
     }
@@ -163,7 +150,6 @@ internal sealed class AobCacheResolver
             return;
         }
 
-        string checksum = XxHash64.HashToUInt64(_region.Span).ToString("X16", CultureInfo.InvariantCulture);
         AobCacheDocument? loaded = null;
 
         try
@@ -175,7 +161,7 @@ internal sealed class AobCacheResolver
             _logger.LogWarning(ex, "Could not read AOB cache {CachePath}; rebuilding it from normal scans.", _options.FilePath);
         }
 
-        _document = IsUsable(loaded, _region.Length, checksum) ? loaded! : CreateDocument(_region.Length, checksum);
+        _document = loaded ?? new AobCacheDocument();
     }
 
     private void Persist()
@@ -237,54 +223,14 @@ internal sealed class AobCacheResolver
             scanMilliseconds: scanWatch.ElapsedMilliseconds);
     }
 
-    private static bool IsUsable(AobCacheDocument? document, int regionLength, string checksum)
-        => document is not null &&
-           document.FormatVersion == AobCacheDocument.CurrentFormatVersion &&
-           string.Equals(document.ChecksumAlgorithm, AobCacheDocument.CurrentChecksumAlgorithm, StringComparison.OrdinalIgnoreCase) &&
-           document.RegionLength == regionLength &&
-           string.Equals(document.RegionChecksum, checksum, StringComparison.OrdinalIgnoreCase) &&
-           document.Entries is not null &&
-           document.AllEntries is not null;
-
-    private static bool IsValidFirstEntry(ReadOnlySpan<byte> region, CompiledPattern pattern, long offset)
-    {
-        if (offset == -1)
-            return true;
-
-        return offset >= 0 && offset <= int.MaxValue && pattern.MatchesAt(region, (int)offset);
-    }
-
-    private static bool IsValidCompleteEntrySet(ReadOnlySpan<byte> region, CompiledPattern pattern, long[]? offsets)
-    {
-        if (offsets is null)
-            return false;
-
-        long previous = -1;
-        foreach (long offset in offsets)
-        {
-            if (offset <= previous || offset > int.MaxValue || !pattern.MatchesAt(region, (int)offset))
-                return false;
-
-            previous = offset;
-        }
-
-        return true;
-    }
-
-    private static AobCacheDocument CreateDocument(int regionLength, string checksum)
-        => new()
-        {
-            FormatVersion = AobCacheDocument.CurrentFormatVersion,
-            ChecksumAlgorithm = AobCacheDocument.CurrentChecksumAlgorithm,
-            RegionChecksum = checksum,
-            RegionLength = regionLength,
-            Entries = new Dictionary<string, long>(StringComparer.Ordinal),
-            AllEntries = new Dictionary<string, long[]>(StringComparer.Ordinal),
-        };
 }
 
 /// <summary>Result of one cache-assisted first-match AOB resolution pass.</summary>
- readonly struct AobCacheResolution(long[] offsets, int cacheHitCount, int scannedPatternCount, long scanMilliseconds)
+internal readonly struct AobCacheResolution(
+    long[] offsets,
+    int cacheHitCount,
+    int scannedPatternCount,
+    long scanMilliseconds)
 {
     public long[] Offsets { get; } = offsets;
     public int CacheHitCount { get; } = cacheHitCount;
@@ -293,7 +239,11 @@ internal sealed class AobCacheResolver
 }
 
 /// <summary>Result of one cache-assisted multi-match AOB resolution pass.</summary>
-internal readonly struct AobCacheAllResolution(long[] offsets, bool cacheHit, bool complete, long scanMilliseconds)
+internal readonly struct AobCacheAllResolution(
+    long[] offsets,
+    bool cacheHit,
+    bool complete,
+    long scanMilliseconds)
 {
     public long[] Offsets { get; } = offsets;
     public bool CacheHit { get; } = cacheHit;

@@ -5,17 +5,12 @@ using RedBird.X64.Memory.Scanners;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.IO.Hashing;
 using Xunit;
 
 namespace RedBird.X64.Tests;
 
 public sealed class AobCacheTests
 {
-    [Fact]
-    public void XxHash64_MatchesThePublishedEmptyInputVector()
-        => Assert.Equal(0xEF46DB3751D8E999UL, XxHash64.HashToUInt64(ReadOnlySpan<byte>.Empty));
-
     [Fact]
     public void Resolve_FirstRunWritesJsonAndSecondRunSkipsTheScan()
     {
@@ -37,7 +32,10 @@ public sealed class AobCacheTests
 
             Assert.True(File.Exists(cachePath));
             string json = File.ReadAllText(cachePath);
-            Assert.Contains("\"regionChecksum\"", json, StringComparison.Ordinal);
+            Assert.DoesNotContain("formatVersion", json, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("checksumAlgorithm", json, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("regionChecksum", json, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("regionLength", json, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("48 89 5C 24 ?? 57", json, StringComparison.Ordinal);
 
             // A different image base proves that the persisted value is an RVA, not an address.
@@ -56,7 +54,7 @@ public sealed class AobCacheTests
     }
 
     [Fact]
-    public void Resolve_ChangedRegionChecksumInvalidatesAndRebuildsTheCache()
+    public void Resolve_ChangedRegionStillUsesCachedOffsetWithoutValidation()
     {
         string cachePath = CreateCachePath();
         try
@@ -78,9 +76,9 @@ public sealed class AobCacheTests
 
             AobCacheResolution changed = AobCacheResolver.Resolve(region, patterns, options, allowParallel: false, NullLogger.Instance);
 
-            Assert.Equal(4, changed.Offsets[0]);
-            Assert.Equal(1, changed.ScannedPatternCount);
-            Assert.Equal(0, changed.CacheHitCount);
+            Assert.Equal(1, changed.Offsets[0]);
+            Assert.Equal(0, changed.ScannedPatternCount);
+            Assert.Equal(1, changed.CacheHitCount);
         }
         finally
         {

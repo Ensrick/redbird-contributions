@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using RedBird.Core.Memory;
 
 namespace RedBird.Core.Memory.Scanners;
 
@@ -38,7 +39,7 @@ public static class MultiPatternScanner
         return resolution.Offsets[0];
     }
 
-    /// <summary>Locates the first occurrence of every pattern, scanning only checksum-valid cache misses.</summary>
+    /// <summary>Locates the first occurrence of every pattern, scanning only cache misses.</summary>
     public static void FindAll(
         ScanRegion region,
         IReadOnlyList<CompiledPattern> patterns,

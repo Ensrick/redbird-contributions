@@ -186,6 +186,50 @@ transaction.AddDetour(
 Use `callOffset` when the signature begins before the call. Indirect calls are rejected.
 `FromPattern` continues to mean that the matched address itself is the hook target.
 
+### Persistent AOB cache
+
+Transactions can persist pattern matches as region-relative virtual addresses and reuse them on the next run:
+
+```csharp
+using RedBird.Core.Memory.Scanners;
+
+string cacheDirectory = "MyCacheDir";
+
+AobCacheOptions aobCache = new(Path.Combine(cacheDirectory, "game-module.aobcache.json"));
+
+var options = new HookTransactionOptions
+{
+    Backend = NativeDetourBackend.Instance,
+    AobCache = aobCache,
+};
+
+using var transaction = new HookTransaction(region, options: options);
+
+DataScanner scanner = DataScanner.Create(
+    region,
+    logger: null,
+    aobCache: aobCache);
+```
+
+The parent directory is created on the first write. The compact JSON file contains AOB-to-RVA maps.
+A complete cache hit avoids the multi-pattern scan; partial hits scan only the missing patterns and then
+update the file. Missing patterns are cached too.
+
+The same cache works with the x64 and x86 `DataScanner`. `Scan` reuses first-match RVAs, while
+`ScanAll` persists complete multi-match RVA sets. When `ScanAll` reaches its result limit, that truncated
+set is returned but is not reused later as a complete result. A scanner instance loads the document once,
+then shares that state across its fluent scan calls. Core callers can also pass a
+`ScanRegion` and `AobCacheOptions` to the cached `MultiPatternScanner.FindFirst`/`FindAll` overloads.
+
+Use one cache file per module or scan region. Cached entries are authoritative: RedBird does not validate
+the region, pattern bytes, or RVA before use. Delete the cache whenever the target binary or its signatures
+change. Malformed files and cache I/O errors fall back to normal scans and do not fail the hook transaction.
+RVA entries never reuse an absolute address from a previous process.
+
+`AobCacheOptions.Store` defaults to `JsonAobCacheStore.Instance`, which uses `System.Text.Json` and
+plain `AobCacheDocument` objects. Implement `IAobCacheStore` and set that property when a binary format
+such as MessagePack is preferable; transaction and scanner behavior remain the same.
+
 When a callback needs `Original`, initialize its persistent handle before registration. Export
 targets do not change that requirement:
 
@@ -204,42 +248,6 @@ If no persistent handle is needed, omit the first argument and keep the handle r
 `DataScanner.CurrentAddress` reports the absolute virtual address. 
 `CurrentOffset` reports the signed byte offset from the associated `ScanRegion.BaseAddress`, which is useful when recording an RVA. 
 Check `Found` first because both a failed scan and a successful match at the region base report an offset of zero.
-
-### Persistent AOB cache
-
-Transactions can persist pattern matches as region-relative virtual addresses and reuse them on the next run:
-
-```csharp
-using RedBird.Core.Memory.Scanners;
-
-string cacheDirectory = "MyCacheDir";
-
-var options = new HookTransactionOptions
-{
-    Backend = NativeDetourBackend.Instance,
-    AobCache = new AobCacheOptions(Path.Combine(cacheDirectory, "game-module.aobcache.json")),
-};
-
-using var transaction = new HookTransaction(region, options: options);
-```
-
-The parent directory is created on the first write. The compact JSON file contains a format version,
-the scan-region length, an XXH64 checksum, and an AOB-to-RVA map. 
-
-On a checksum match, cached entries are also checked against the current bytes before use. 
-A complete cache hit avoids the multi-pattern scan; partial hits scan only the missing patterns and then update the file. Missing patterns are cached too.
-
-The same cache works with the x64 and x86 `DataScanner`. `Scan` reuses first-match RVAs, while
-`ScanAll` persists complete multi-match RVA sets. When `ScanAll` reaches its result limit, that truncated
-set is returned but is not reused later as a complete result. A scanner instance loads and checksums its
-region only once, then shares that state across its fluent scan calls. Core callers can also pass a
-`ScanRegion` and `AobCacheOptions` to the cached `MultiPatternScanner.FindFirst`/`FindAll` overloads.
-
-Use one cache file per module or scan region. A changed checksum, malformed file, unsupported format,
-or invalid RVA causes a safe rescan. Cache I/O errors are logged and never fail the hook transaction.
-
-`AobCacheOptions.Store` defaults to `JsonAobCacheStore.Instance`. Implement `IAobCacheStore` and set
-that property when a binary format such as MessagePack or otherwise is preferable.
 
 ## X86 and X64 switch/FSM dispatches
 
