@@ -13,10 +13,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="System.IO.Hashing" />
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" />
-  </ItemGroup>
-  
-  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
-    <Reference Include="System.Runtime.Serialization" />
+    <PackageReference Include="System.Text.Json" Condition="'$(TargetFramework)' == 'net48'" />
   </ItemGroup>
 
   <ItemGroup>

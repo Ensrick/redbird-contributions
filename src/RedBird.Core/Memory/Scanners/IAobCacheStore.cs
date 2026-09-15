@@ -1,6 +1,6 @@
 ﻿namespace RedBird.Core.Memory.Scanners;
 
-/// <summary>Loads and saves persistent AOB cache documents.</summary>
+/// <summary>Loads and saves plain persistent AOB cache documents.</summary>
 /// <remarks>
 /// Implement this interface to use a format such as MessagePack. Implementations should replace existing files atomically when possible.
 /// </remarks>

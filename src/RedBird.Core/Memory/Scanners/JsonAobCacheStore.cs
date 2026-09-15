@@ -1,12 +1,21 @@
 ﻿using System;
 using System.IO;
-using System.Runtime.Serialization.Json;
+using System.Text.Json;
 
 namespace RedBird.Core.Memory.Scanners;
 
 /// <summary>Compact JSON implementation of <see cref="IAobCacheStore"/>.</summary>
 public sealed class JsonAobCacheStore : IAobCacheStore
 {
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        AllowTrailingCommas = true,
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        WriteIndented = false,
+    };
+
     /// <summary>Shared stateless store instance.</summary>
     public static JsonAobCacheStore Instance { get; } = new();
 
@@ -19,7 +28,7 @@ public sealed class JsonAobCacheStore : IAobCacheStore
             return null;
 
         using FileStream stream = new(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-        return CreateSerializer().ReadObject(stream) as AobCacheDocument;
+        return JsonSerializer.Deserialize<AobCacheDocument>(stream, SerializerOptions);
     }
 
     /// <inheritdoc/>
@@ -37,7 +46,7 @@ public sealed class JsonAobCacheStore : IAobCacheStore
         {
             using (FileStream stream = new(temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
-                CreateSerializer().WriteObject(stream, document);
+                JsonSerializer.Serialize(stream, document, SerializerOptions);
                 stream.Flush();
             }
 
@@ -52,10 +61,4 @@ public sealed class JsonAobCacheStore : IAobCacheStore
                 File.Delete(temporaryPath);
         }
     }
-
-    private static DataContractJsonSerializer CreateSerializer()
-        => new(typeof(AobCacheDocument), new DataContractJsonSerializerSettings
-        {
-            UseSimpleDictionaryFormat = true,
-        });
 }

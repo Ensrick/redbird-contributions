@@ -175,7 +175,13 @@ internal static class HookCommitPipeline
 
         if (patterns.Count > 0)
         {
-            AobCacheResolution resolution = AobCacheResolver.Resolve(region, patterns, options.AobCache, options.ParallelScan, logger);
+            AobCacheResolution resolution = AobCacheResolver.Resolve(
+                region,
+                patterns,
+                options.AobCache,
+                options.ParallelScan,
+                logger);
+
             long[] offsets = resolution.Offsets;
             scanMilliseconds = resolution.ScanMilliseconds;
 

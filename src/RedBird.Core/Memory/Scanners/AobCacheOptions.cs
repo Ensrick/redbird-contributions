@@ -3,7 +3,7 @@ using System.IO;
 
 namespace RedBird.Core.Memory.Scanners;
 
-/// <summary>Configures persistent AOB-to-RVA resolution for hook transactions.</summary>
+/// <summary>Configures persistent AOB-to-RVA resolution for hook transactions and standalone scanners.</summary>
 public sealed record AobCacheOptions
 {
     /// <summary>

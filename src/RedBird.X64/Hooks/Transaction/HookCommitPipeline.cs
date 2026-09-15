@@ -174,7 +174,13 @@ internal static class HookCommitPipeline
 
         if (patterns.Count > 0)
         {
-            AobCacheResolution resolution = AobCacheResolver.Resolve(region, patterns, options.AobCache, options.ParallelScan, logger);
+            AobCacheResolution resolution = AobCacheResolver.Resolve(
+                region,
+                patterns,
+                options.AobCache,
+                options.ParallelScan,
+                logger);
+
             long[] offsets = resolution.Offsets;
             scanMilliseconds = resolution.ScanMilliseconds;
 
@@ -323,9 +329,9 @@ internal static class HookCommitPipeline
     /// Undoes a partially applied commit, newest first, so overlapping patches unwind in the reverse order they were written.
     /// </summary>
     private static void Rollback(
-        List<HookDescriptor> prepared, 
-        List<HookDescriptor> installed, 
-        List<IHook> installedSink, 
+        List<HookDescriptor> prepared,
+        List<HookDescriptor> installed,
+        List<IHook> installedSink,
         ILogger logger)
     {
         logger.LogWarning("Rolling back {Installed} installed and {Prepared} prepared hooks.", installed.Count, prepared.Count - installed.Count);

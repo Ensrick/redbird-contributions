@@ -81,6 +81,12 @@ the scan-region length, an XXH64 checksum, and an AOB-to-RVA map.
 On a checksum match, cached entries are also checked against the current bytes before use. 
 A complete cache hit avoids the multi-pattern scan; partial hits scan only the missing patterns and then update the file. Missing patterns are cached too.
 
+The same cache works with the x64 and x86 `DataScanner`. `Scan` reuses first-match RVAs, while
+`ScanAll` persists complete multi-match RVA sets. When `ScanAll` reaches its result limit, that truncated
+set is returned but is not reused later as a complete result. A scanner instance loads and checksums its
+region only once, then shares that state across its fluent scan calls. Core callers can also pass a
+`ScanRegion` and `AobCacheOptions` to the cached `MultiPatternScanner.FindFirst`/`FindAll` overloads.
+
 Use one cache file per module or scan region. A changed checksum, malformed file, unsupported format,
 or invalid RVA causes a safe rescan. Cache I/O errors are logged and never fail the hook transaction.
 

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace RedBird.Core.Memory.Scanners;
 
@@ -11,6 +13,58 @@ public static class MultiPatternScanner
 {
     private const int ParallelThresholdBytes = 4 * 1024 * 1024;
     private const int AnchorIsSecondFlag = 1 << 16;
+
+    /// <summary>Locates the first occurrence of a pattern through a persistent AOB-to-RVA cache.</summary>
+    public static long FindFirst(
+        ScanRegion region,
+        CompiledPattern pattern,
+        AobCacheOptions cache,
+        ILogger? logger = null)
+    {
+        if (region is null)
+            throw new ArgumentNullException(nameof(region));
+        if (pattern is null)
+            throw new ArgumentNullException(nameof(pattern));
+        if (cache is null)
+            throw new ArgumentNullException(nameof(cache));
+
+        AobCacheResolution resolution = AobCacheResolver.Resolve(
+            region,
+            [pattern],
+            cache,
+            allowParallel: false,
+            logger ?? NullLogger.Instance);
+
+        return resolution.Offsets[0];
+    }
+
+    /// <summary>Locates the first occurrence of every pattern, scanning only checksum-valid cache misses.</summary>
+    public static void FindAll(
+        ScanRegion region,
+        IReadOnlyList<CompiledPattern> patterns,
+        Span<long> results,
+        AobCacheOptions cache,
+        bool allowParallel = true,
+        ILogger? logger = null)
+    {
+        if (region is null)
+            throw new ArgumentNullException(nameof(region));
+        if (patterns is null)
+            throw new ArgumentNullException(nameof(patterns));
+        if (results.Length < patterns.Count)
+            throw new ArgumentException("Results buffer is smaller than the pattern list.", nameof(results));
+        if (cache is null)
+            throw new ArgumentNullException(nameof(cache));
+
+        AobCacheResolution resolution = AobCacheResolver.Resolve(
+            region,
+            patterns,
+            cache,
+            allowParallel,
+            logger ?? NullLogger.Instance);
+
+        resolution.Offsets.AsSpan().CopyTo(results);
+    }
 
     /// <summary>
     /// Locates the first occurrence of each pattern. For repeated scans, construct a

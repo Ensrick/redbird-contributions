@@ -30,24 +30,35 @@ public sealed class DataScanner
 {
     private readonly ScanRegion _region;
     private readonly ILogger _logger;
+    private readonly AobCacheResolver? _cacheResolver;
 
     private UInt64 _currentAddress;
     private bool _scanSuccess;
     private string? _lastPattern;
 
-    private DataScanner(ScanRegion region, ILogger? logger)
+    private DataScanner(ScanRegion region, ILogger? logger, AobCacheOptions? aobCache)
     {
         _region = region ?? throw new ArgumentNullException(nameof(region));
         _logger = logger ?? NullLogger.Instance;
+        _cacheResolver = aobCache is null ? null : new AobCacheResolver(_region, aobCache, _logger);
     }
 
     /// <summary>Creates a scanner over <paramref name="region"/>.</summary>
-    public static DataScanner Create(ScanRegion region, ILogger? logger = null) => new(region, logger);
+    public static DataScanner Create(ScanRegion region, ILogger? logger = null) => new(region, logger, aobCache: null);
+
+    /// <summary>Creates a scanner over <paramref name="region"/> with a persistent AOB-to-RVA cache.</summary>
+    public static DataScanner Create(ScanRegion region, ILogger? logger, AobCacheOptions aobCache)
+        => new(region, logger, aobCache ?? throw new ArgumentNullException(nameof(aobCache)));
 
     /// <summary>Creates a scanner over a copied span.</summary>
     [Obsolete("Copies the whole region. Use ScanRegion.FromModule/FromPointer and the ScanRegion overload.")]
     public static DataScanner Create(ReadOnlySpan<byte> memory, UInt64 imageBase, ILogger? logger = null)
-        => new(ScanRegion.Copy(memory, imageBase), logger);
+        => new(ScanRegion.Copy(memory, imageBase), logger, aobCache: null);
+
+    /// <summary>Creates a cached scanner over a copied span.</summary>
+    [Obsolete("Copies the whole region. Use ScanRegion.FromModule/FromPointer and the ScanRegion overload.")]
+    public static DataScanner Create(ReadOnlySpan<byte> memory, UInt64 imageBase, ILogger? logger, AobCacheOptions aobCache)
+        => new(ScanRegion.Copy(memory, imageBase), logger, aobCache ?? throw new ArgumentNullException(nameof(aobCache)));
 
     /// <summary>Absolute virtual address the scanner is currently pointing at.</summary>
     public UInt64 CurrentAddress => _currentAddress;
@@ -77,7 +88,19 @@ public sealed class DataScanner
 
         _lastPattern = pattern.Source;
 
-        long found = MultiPatternScanner.FindFirst(_region.Span, pattern);
+        long found;
+        bool cacheHit = false;
+
+        if (_cacheResolver is null)
+        {
+            found = MultiPatternScanner.FindFirst(_region.Span, pattern);
+        }
+        else
+        {
+            AobCacheResolution resolution = _cacheResolver.Resolve([pattern], allowParallel: false);
+            found = resolution.Offsets[0];
+            cacheHit = resolution.CacheHitCount == 1;
+        }
 
         if (found < 0)
         {
@@ -89,6 +112,9 @@ public sealed class DataScanner
 
         _currentAddress = unchecked((UInt64)((long)_region.ToAddress(found) + offset));
         _scanSuccess = true;
+
+        if (cacheHit)
+            _logger.LogDebug("Pattern loaded from AOB cache: {Pattern}", pattern.Source);
 
         _logger.LogDebug("Pattern matched at 0x{Address:X16}: {Pattern}", _currentAddress, pattern.Source);
         return this;
@@ -120,6 +146,19 @@ public sealed class DataScanner
     {
         CompiledPattern compiled = CompiledPattern.Parse(pattern);
         List<UInt64> matches = [];
+
+        if (_cacheResolver is not null)
+        {
+            AobCacheAllResolution resolution = _cacheResolver.ResolveAll(compiled, limit);
+            foreach (long matchOffset in resolution.Offsets)
+                matches.Add(unchecked((UInt64)((long)_region.ToAddress(matchOffset) + offset)));
+
+            if (resolution.CacheHit)
+                _logger.LogDebug("Loaded {Count} matches from AOB cache: {Pattern}", matches.Count, pattern);
+
+            _logger.LogDebug("Pattern matched {Count} times: {Pattern}", matches.Count, pattern);
+            return matches;
+        }
 
         ReadOnlySpan<byte> haystack = _region.Span;
         int cursor = 0;
