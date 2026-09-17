@@ -151,8 +151,8 @@ public static class AssemblerExtensions
 
     /// <summary>
     /// Creates a temporary 16-byte-aligned stack frame, lets the caller push exactly
-    /// <paramref name="stackArgumentBytes"/> bytes, and performs a cdecl call. This is suitable
-    /// for managed reverse-P/Invoke thunks on both Windows and System V i386.
+    /// <paramref name="stackArgumentBytes"/> bytes, and performs a cdecl call. 
+    /// This is suitable for managed reverse-P/Invoke thunks on both Windows and System V i386.
     /// </summary>
     public static void X86AlignedCdecl(
         this Assembler assembler,

@@ -307,6 +307,17 @@ public static class AssemblerExtensions
     /// </param>
     public record X64StackArgument(X64ArgumentSourceType SourceType, ulong Value);
 
+    /// <inheritdoc cref="X64FastcallSafe(Assembler, UInt64, int, Action{Assembler}, bool, bool, X64StackArgument[])"/>
+    public static void X64FastcallSafePinnedDelegate(
+        this Assembler assembler,
+        Delegate managedCallback,
+        int totalArgumentCount,
+        Action<Assembler>? prepareArgumentsAction = null,
+        bool preserveRAX = true,
+        bool preserveXMM = false,
+        params X64StackArgument[] stackArguments) => 
+        X64FastcallSafe(assembler, (UInt64)System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(managedCallback), totalArgumentCount, prepareArgumentsAction, preserveRAX, preserveXMM, stackArguments);
+
     /// <summary>
     /// Generates a complete Windows x64 ABI call stub with state preservation, stack alignment, and optional stack-argument forwarding.
     /// </summary>
