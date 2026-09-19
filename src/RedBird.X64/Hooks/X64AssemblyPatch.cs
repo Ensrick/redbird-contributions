@@ -205,7 +205,7 @@ public sealed class X64AssemblyPatch : IHook
             return;
 
         if (_targetAddress == 0 || _patchBytes.Length == 0)
-            throw new InvalidOperationException($"Patch '{Name}' has no assembled body; call Generate before Enable.");
+            throw new InvalidOperationException($"Patch [{Name}] has no assembled body; call Generate before Enable.");
 
         CodePatch.Write(_targetAddress, _patchBytes);
 
