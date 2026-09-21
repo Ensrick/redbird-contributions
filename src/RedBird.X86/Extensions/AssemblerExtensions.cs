@@ -381,9 +381,7 @@ public static class AssemblerExtensions
         => assembler.X86CallSafe(targetAddress, X86CallingConvention.Pascal, prepareArgumentsAction, preserveEAX, preserveXMM, stackArguments);
 
     /// <summary>Moves up to two values into Microsoft x86 fastcall's ECX/EDX argument registers.</summary>
-    public static void RelocateRegistersToX86FastcallArgs(
-        this Assembler assembler,
-        params AssemblerRegister32[] sourceRegisters)
+    public static void RelocateRegistersToX86FastcallArgs(this Assembler assembler, params AssemblerRegister32[] sourceRegisters)
     {
         if (sourceRegisters.Length > 2)
             throw new ArgumentException("Microsoft x86 fastcall has only two GPR argument registers.", nameof(sourceRegisters));
@@ -418,11 +416,50 @@ public static class AssemblerExtensions
         TestNativeFlag(assembler, flags.GetAddress(index), scratchRegister, preserveScratch);
     }
 
-    private static void TestNativeFlag(
-        Assembler assembler,
-        UInt64 address,
-        AssemblerRegister32 scratchRegister,
-        bool preserveScratch)
+    /// <summary>
+    /// Compares the flag-array element selected by a runtime register with zero.
+    /// </summary>
+    /// <remarks>
+    /// The index is an unsigned byte offset because each flag occupies one byte. 
+    /// No runtime bounds check is emitted. 
+    /// The index register is preserved; <paramref name="scratchRegister"/> must be a different register and is preserved by default.
+    /// </remarks>
+    public static void TestNativeFlag(this Assembler assembler, NativeFlagArray flags, AssemblerRegister32 indexRegister, AssemblerRegister32 scratchRegister, bool preserveScratch = true)
+    {
+        if (flags is null)
+            throw new ArgumentNullException(nameof(flags));
+
+        TestNativeFlag(assembler, flags.Address, indexRegister, scratchRegister, preserveScratch);
+    }
+
+    /// <summary>
+    /// Loads a runtime index from memory and compares the selected flag-array element with zero.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The memory operand is read before any register-preservation push, so an operand such as <c>__dword_ptr[esp + 0x10]</c> uses the caller's original stack pointer.
+    /// </para>
+    /// <para>
+    /// <paramref name="indexScratchRegister"/> is always overwritten. 
+    /// The address scratch register is preserved by default. 
+    /// No runtime bounds check is emitted.
+    /// </para>
+    /// </remarks>
+    public static void TestNativeFlag(this Assembler assembler, NativeFlagArray flags, AssemblerMemoryOperand indexSource, AssemblerRegister32 indexScratchRegister, AssemblerRegister32 addressScratchRegister, bool preserveAddressScratch = true)
+    {
+        if (assembler is null)
+            throw new ArgumentNullException(nameof(assembler));
+        if (flags is null)
+            throw new ArgumentNullException(nameof(flags));
+
+        ValidateNativeFlagIndexRegisters(indexScratchRegister, addressScratchRegister);
+        UInt64 address = flags.Address;
+
+        assembler.mov(indexScratchRegister, indexSource);
+        TestNativeFlag(assembler, address, indexScratchRegister, addressScratchRegister, preserveAddressScratch);
+    }
+
+    private static void TestNativeFlag(Assembler assembler, UInt64 address, AssemblerRegister32 scratchRegister, bool preserveScratch)
     {
         if (assembler is null)
             throw new ArgumentNullException(nameof(assembler));
@@ -439,6 +476,34 @@ public static class AssemblerExtensions
 
         if (preserveScratch)
             assembler.pop(scratchRegister);
+    }
+
+    private static void TestNativeFlag(Assembler assembler, UInt64 address, AssemblerRegister32 indexRegister, AssemblerRegister32 scratchRegister, bool preserveScratch)
+    {
+        if (assembler is null)
+            throw new ArgumentNullException(nameof(assembler));
+
+        EnsureX86Address(address, nameof(address));
+        ValidateNativeFlagIndexRegisters(indexRegister, scratchRegister);
+
+        if (preserveScratch)
+            assembler.push(scratchRegister);
+
+        assembler.mov(scratchRegister, (UInt32)address);
+        assembler.cmp(__byte_ptr[scratchRegister + indexRegister], 0);
+
+        if (preserveScratch)
+            assembler.pop(scratchRegister);
+    }
+
+    private static void ValidateNativeFlagIndexRegisters(AssemblerRegister32 indexRegister, AssemblerRegister32 scratchRegister)
+    {
+        if (indexRegister == esp)
+            throw new ArgumentException("ESP cannot be used as a native-state array index register.", nameof(indexRegister));
+        if (scratchRegister == esp)
+            throw new ArgumentException("ESP cannot be used as the native-state scratch register.", nameof(scratchRegister));
+        if (indexRegister == scratchRegister)
+            throw new ArgumentException("The native-state index and scratch registers must be different.", nameof(scratchRegister));
     }
 
     private static void EnsureX86Address(UInt64 address, string parameterName)

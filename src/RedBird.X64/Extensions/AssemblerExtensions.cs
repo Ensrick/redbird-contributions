@@ -525,17 +525,12 @@ public static class AssemblerExtensions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This emits a direct native-memory read; it does not call into managed code. When
-    /// <paramref name="preserveScratch"/> is true, the scratch register is restored with
-    /// <c>pop</c>, which does not alter the flags produced by <c>cmp</c>.
+    /// This emits a direct native-memory read; it does not call into managed code. 
+    /// When <paramref name="preserveScratch"/> is true, the scratch register is restored with <c>pop</c>, which does not alter the flags produced by <c>cmp</c>.
     /// </para>
     /// <para>Branch immediately after this helper so later instructions do not replace the flags.</para>
     /// </remarks>
-    public static void TestNativeFlag(
-        this Assembler assembler,
-        NativeFlag flag,
-        AssemblerRegister64 scratchRegister,
-        bool preserveScratch = true)
+    public static void TestNativeFlag(this Assembler assembler, NativeFlag flag, AssemblerRegister64 scratchRegister, bool preserveScratch = true)
     {
         if (flag is null)
             throw new ArgumentNullException(nameof(flag));
@@ -554,6 +549,72 @@ public static class AssemblerExtensions
         TestNativeFlag(assembler, flags.GetAddress(index), scratchRegister, preserveScratch);
     }
 
+    /// <summary>
+    /// Compares the flag-array element selected by a runtime 64-bit register with zero.
+    /// </summary>
+    /// <remarks>
+    /// The index is an unsigned byte offset because each flag occupies one byte. 
+    /// No runtime bounds check is emitted. 
+    /// The index register is preserved; <paramref name="scratchRegister"/> must be a different register and is preserved by default.
+    /// </remarks>
+    public static void TestNativeFlag(this Assembler assembler, NativeFlagArray flags, AssemblerRegister64 indexRegister, AssemblerRegister64 scratchRegister, bool preserveScratch = true)
+    {
+        if (flags is null)
+            throw new ArgumentNullException(nameof(flags));
+
+        TestNativeFlag(assembler, flags.Address, indexRegister, scratchRegister, preserveScratch);
+    }
+
+    /// <summary>
+    /// Compares the flag-array element selected by a runtime unsigned 32-bit register with zero.
+    /// </summary>
+    /// <remarks>
+    /// A self-move zero-extends the index into its corresponding 64-bit register before it is used for addressing. 
+    /// No runtime bounds check is emitted.
+    /// </remarks>
+    public static void TestNativeFlag(this Assembler assembler, NativeFlagArray flags, AssemblerRegister32 indexRegister, AssemblerRegister64 scratchRegister, bool preserveScratch = true)
+    {
+        if (assembler is null)
+            throw new ArgumentNullException(nameof(assembler));
+        if (flags is null)
+            throw new ArgumentNullException(nameof(flags));
+
+        AssemblerRegister64 fullIndexRegister = new(indexRegister.Value.GetFullRegister());
+        ValidateNativeFlagIndexRegisters(fullIndexRegister, scratchRegister);
+        UInt64 address = flags.Address;
+
+        assembler.mov(indexRegister, indexRegister);
+        TestNativeFlag(assembler, address, fullIndexRegister, scratchRegister, preserveScratch);
+    }
+
+    /// <summary>
+    /// Loads an unsigned 32-bit runtime index from memory and compares the selected flag-array element with zero.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The memory operand is read before any register-preservation push, so an operand such as <c>__dword_ptr[rsp + 0x40]</c> uses the caller's original stack pointer.
+    /// </para>
+    /// <para>
+    /// <paramref name="indexScratchRegister"/> is always overwritten. 
+    /// The address scratch register is preserved by default. 
+    /// No runtime bounds check is emitted.
+    /// </para>
+    /// </remarks>
+    public static void TestNativeFlag(this Assembler assembler, NativeFlagArray flags, AssemblerMemoryOperand indexSource, AssemblerRegister32 indexScratchRegister, AssemblerRegister64 addressScratchRegister, bool preserveAddressScratch = true)
+    {
+        if (assembler is null)
+            throw new ArgumentNullException(nameof(assembler));
+        if (flags is null)
+            throw new ArgumentNullException(nameof(flags));
+
+        AssemblerRegister64 fullIndexRegister = new(indexScratchRegister.Value.GetFullRegister());
+        ValidateNativeFlagIndexRegisters(fullIndexRegister, addressScratchRegister);
+        UInt64 address = flags.Address;
+
+        assembler.mov(indexScratchRegister, indexSource);
+        TestNativeFlag(assembler, address, fullIndexRegister, addressScratchRegister, preserveAddressScratch);
+    }
+
     private static void TestNativeFlag(Assembler assembler, UInt64 address, AssemblerRegister64 scratchRegister, bool preserveScratch)
     {
         if (assembler is null)
@@ -569,5 +630,32 @@ public static class AssemblerExtensions
 
         if (preserveScratch)
             assembler.pop(scratchRegister);
+    }
+
+    private static void TestNativeFlag(Assembler assembler, UInt64 address, AssemblerRegister64 indexRegister, AssemblerRegister64 scratchRegister, bool preserveScratch)
+    {
+        if (assembler is null)
+            throw new ArgumentNullException(nameof(assembler));
+
+        ValidateNativeFlagIndexRegisters(indexRegister, scratchRegister);
+
+        if (preserveScratch)
+            assembler.push(scratchRegister);
+
+        assembler.mov(scratchRegister, address);
+        assembler.cmp(__byte_ptr[scratchRegister + indexRegister], 0);
+
+        if (preserveScratch)
+            assembler.pop(scratchRegister);
+    }
+
+    private static void ValidateNativeFlagIndexRegisters(AssemblerRegister64 indexRegister, AssemblerRegister64 scratchRegister)
+    {
+        if (indexRegister == rsp)
+            throw new ArgumentException("RSP cannot be used as a native-state array index register.", nameof(indexRegister));
+        if (scratchRegister == rsp)
+            throw new ArgumentException("RSP cannot be used as the native-state scratch register.", nameof(scratchRegister));
+        if (indexRegister == scratchRegister)
+            throw new ArgumentException("The native-state index and scratch registers must be different.", nameof(scratchRegister));
     }
 }

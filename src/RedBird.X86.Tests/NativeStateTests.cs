@@ -40,5 +40,65 @@ public sealed class NativeStateTests
         Assert.Equal(41, call());
     }
 
+    [Fact]
+    public void FlagArray_CanUseRuntimeRegisterIndex()
+    {
+        using NativeStateBlock state = new();
+        NativeFlagArray flags = state.AllocateFlags(4);
+        flags[1] = true;
+
+        using ExecutableX86Function function = ExecutableX86Function.Create(assembler =>
+        {
+            Label disabled = assembler.CreateLabel();
+
+            assembler.mov(ecx, __dword_ptr[esp + 4]);
+            assembler.mov(edx, 40);
+            assembler.TestNativeFlag(flags, ecx, edx);
+            assembler.jz(disabled);
+            assembler.mov(eax, edx);
+            assembler.ret();
+
+            assembler.Label(ref disabled);
+            assembler.mov(eax, edx);
+            assembler.inc(eax);
+            assembler.ret();
+        });
+
+        UnaryInt call = function.GetDelegate<UnaryInt>();
+
+        Assert.Equal(41, call(0));
+        Assert.Equal(40, call(1));
+    }
+
+    [Fact]
+    public void FlagArray_CanLoadRuntimeIndexFromStackMemory()
+    {
+        using NativeStateBlock state = new();
+        NativeFlagArray flags = state.AllocateFlags(4);
+        flags[2] = true;
+
+        using ExecutableX86Function function = ExecutableX86Function.Create(assembler =>
+        {
+            Label disabled = assembler.CreateLabel();
+
+            assembler.mov(edx, 40);
+            assembler.TestNativeFlag(flags, __dword_ptr[esp + 4], ecx, edx);
+            assembler.jz(disabled);
+            assembler.mov(eax, edx);
+            assembler.ret();
+
+            assembler.Label(ref disabled);
+            assembler.mov(eax, edx);
+            assembler.inc(eax);
+            assembler.ret();
+        });
+
+        UnaryInt call = function.GetDelegate<UnaryInt>();
+
+        Assert.Equal(41, call(1));
+        Assert.Equal(40, call(2));
+    }
+
     private delegate int NullaryInt();
+    private delegate int UnaryInt(int index);
 }

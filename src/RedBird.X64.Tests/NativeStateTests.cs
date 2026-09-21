@@ -1,6 +1,7 @@
 ﻿using System;
 using Iced.Intel;
 using RedBird.Core.Memory;
+using RedBird.Core.Platform;
 using RedBird.X64.Extensions;
 using RedBird.X64.Tests.Infrastructure;
 using Xunit;
@@ -62,6 +63,68 @@ public sealed class NativeStateTests
     }
 
     [Fact]
+    public void FlagArray_CanUseRuntimeRegisterIndex()
+    {
+        using NativeStateBlock state = new();
+        NativeFlagArray flags = state.AllocateFlags(4);
+        flags[1] = true;
+        flags[3] = true;
+
+        using ExecutableFunction function = ExecutableFunction.Create(assembler =>
+        {
+            Label disabled = assembler.CreateLabel();
+
+            assembler.mov(r11d, 40);
+            assembler.TestNativeFlag(flags, AbiRegisters.Arg0D, r11);
+            assembler.jz(disabled);
+            assembler.mov(eax, r11d);
+            assembler.ret();
+
+            assembler.Label(ref disabled);
+            assembler.mov(eax, r11d);
+            assembler.inc(eax);
+            assembler.ret();
+        });
+
+        TestDelegates.BinaryInt call = function.GetDelegate<TestDelegates.BinaryInt>();
+
+        Assert.Equal(41, call(0, 0));
+        Assert.Equal(40, call(1, 0));
+        Assert.Equal(41, call(2, 0));
+        Assert.Equal(40, call(3, 0));
+    }
+
+    [Fact]
+    public void FlagArray_CanLoadRuntimeIndexFromStackMemory()
+    {
+        using NativeStateBlock state = new();
+        NativeFlagArray flags = state.AllocateFlags(4);
+        flags[2] = true;
+
+        Int64 stackIndexOffset = PlatformInfo.IsWindows ? 0x38 : 0x08;
+        using ExecutableFunction function = ExecutableFunction.Create(assembler =>
+        {
+            Label disabled = assembler.CreateLabel();
+
+            assembler.mov(r11d, 40);
+            assembler.TestNativeFlag(flags, __dword_ptr[rsp + stackIndexOffset], r10d, r11);
+            assembler.jz(disabled);
+            assembler.mov(eax, r11d);
+            assembler.ret();
+
+            assembler.Label(ref disabled);
+            assembler.mov(eax, r11d);
+            assembler.inc(eax);
+            assembler.ret();
+        });
+
+        SevenInt call = function.GetDelegate<SevenInt>();
+
+        Assert.Equal(41, call(0, 0, 0, 0, 0, 0, 1));
+        Assert.Equal(40, call(0, 0, 0, 0, 0, 0, 2));
+    }
+
+    [Fact]
     public void ValuesAndArrays_AreAlignedAndShareOneStableBlock()
     {
         using NativeStateBlock state = new(128);
@@ -96,4 +159,6 @@ public sealed class NativeStateTests
         Assert.Throws<ObjectDisposedException>(() => _ = flag.Value);
         Assert.Throws<ObjectDisposedException>(() => state.AllocateFlag());
     }
+
+    private delegate int SevenInt(int a, int b, int c, int d, int e, int f, int index);
 }
