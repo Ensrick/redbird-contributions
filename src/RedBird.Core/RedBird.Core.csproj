@@ -32,10 +32,10 @@
     Link and TargetPath give the copied output the simple filename "libredbird_thread_patch.so".
   -->
     <None Remove="runtimes/linux-x64/native/libredbird_thread_patch.so" />
-    <None Include="runtimes/linux-x64/native/libredbird_thread_patch.so"
-          Condition="Exists('runtimes/linux-x64/native/libredbird_thread_patch.so')"
+    <None Include="$(MSBuildProjectDirectory)/runtimes/linux-x64/native/libredbird_thread_patch.so"
+          Condition="Exists('$(MSBuildProjectDirectory)/runtimes/linux-x64/native/libredbird_thread_patch.so')"
           Pack="True"
-          PackagePath="runtimes/linux-x64/native/libredbird_thread_patch.so"
+          PackagePath="runtimes/linux-x64/native/"
           CopyToOutputDirectory="PreserveNewest"
           CopyToPublishDirectory="PreserveNewest"
           Link="libredbird_thread_patch.so"
