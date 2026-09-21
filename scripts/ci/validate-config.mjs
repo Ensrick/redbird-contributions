@@ -83,10 +83,21 @@ if (!prepareScript.includes('native/linux-x64/build.sh')) {
 }
 
 const coreProject = fs.readFileSync('src/RedBird.Core/RedBird.Core.csproj', 'utf8');
-if (!coreProject.includes('<None Include="runtimes/linux-x64/native/libredbird_thread_patch.so"')) {
+const threadPatchAsset = 'runtimes/linux-x64/native/libredbird_thread_patch.so';
+const threadPatchItem = [...coreProject.matchAll(/<None\b[\s\S]*?\/>/g)]
+  .map(match => match[0])
+  .find(item => item.includes(`Include="$(MSBuildProjectDirectory)/${threadPatchAsset}"`));
+
+if (!threadPatchItem) {
   throw new Error('RedBird.Core must explicitly include the Linux thread-patch runtime asset when packing.');
 }
-if (!coreProject.includes('PackagePath="runtimes/linux-x64/native/libredbird_thread_patch.so"')) {
+if (!threadPatchItem.includes(`Condition="Exists('$(MSBuildProjectDirectory)/${threadPatchAsset}')"`)) {
+  throw new Error('RedBird.Core must resolve the Linux thread-patch runtime asset from the project directory.');
+}
+if (!/\bPack="true"/i.test(threadPatchItem)) {
+  throw new Error('RedBird.Core must pack the Linux thread-patch runtime asset.');
+}
+if (!/\bPackagePath="runtimes\/linux-x64\/native\/(?:libredbird_thread_patch\.so)?"/.test(threadPatchItem)) {
   throw new Error('RedBird.Core has an incorrect NuGet package path for the Linux thread-patch runtime asset.');
 }
 
