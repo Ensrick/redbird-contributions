@@ -1,6 +1,7 @@
 using System;
 using Iced.Intel;
 using RedBird.Abstractions.CallingConventions;
+using RedBird.Core.Memory;
 using static Iced.Intel.AssemblerRegisters;
 
 namespace RedBird.X86.Extensions;
@@ -393,6 +394,51 @@ public static class AssemblerExtensions
             if (sourceRegisters[index] != destinations[index])
                 assembler.mov(destinations[index], sourceRegisters[index]);
         }
+    }
+
+    /// <summary>
+    /// Compares a managed-updatable native flag with zero, ready for a conditional jump.
+    /// </summary>
+    public static void TestNativeFlag(this Assembler assembler, NativeFlag flag, AssemblerRegister32 scratchRegister, bool preserveScratch = true)
+    {
+        if (flag is null)
+            throw new ArgumentNullException(nameof(flag));
+
+        TestNativeFlag(assembler, flag.Address, scratchRegister, preserveScratch);
+    }
+
+    /// <summary>
+    /// Compares one managed-updatable native flag-array element with zero, ready for a conditional jump.
+    /// </summary>
+    public static void TestNativeFlag(this Assembler assembler, NativeFlagArray flags, int index, AssemblerRegister32 scratchRegister, bool preserveScratch = true)
+    {
+        if (flags is null)
+            throw new ArgumentNullException(nameof(flags));
+
+        TestNativeFlag(assembler, flags.GetAddress(index), scratchRegister, preserveScratch);
+    }
+
+    private static void TestNativeFlag(
+        Assembler assembler,
+        UInt64 address,
+        AssemblerRegister32 scratchRegister,
+        bool preserveScratch)
+    {
+        if (assembler is null)
+            throw new ArgumentNullException(nameof(assembler));
+        if (scratchRegister == esp)
+            throw new ArgumentException("ESP cannot be used as the native-state scratch register.", nameof(scratchRegister));
+
+        EnsureX86Address(address, nameof(address));
+
+        if (preserveScratch)
+            assembler.push(scratchRegister);
+
+        assembler.mov(scratchRegister, (UInt32)address);
+        assembler.cmp(__byte_ptr[scratchRegister], 0);
+
+        if (preserveScratch)
+            assembler.pop(scratchRegister);
     }
 
     private static void EnsureX86Address(UInt64 address, string parameterName)

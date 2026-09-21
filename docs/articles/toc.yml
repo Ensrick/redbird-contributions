@@ -2,6 +2,8 @@
   href: getting-started.md
 - name: Hooks and backends
   href: hooks-and-backends.md
+- name: Managed-updatable native state
+  href: native-state.md
 - name: Calling conventions
   href: calling-conventions.md
 - name: Executable functions

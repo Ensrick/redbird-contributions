@@ -23,6 +23,7 @@ It offers X64 and X86 detour engines, transactional pattern-based hooks, executa
 - Hook chaining with safe reverse-order unhooking.
 - Pattern (wildcard AOB), relative-call destination, address, RVA, and export targets with transactional commit and rollback policies.
 - Context hooks, inline hooks, function clones, stateful assembly patches, and instruction walkers.
+- Managed-updatable native state for inexpensive reads from generated assembly.
 - Public runtime-assembled executable functions for X64 and X86.
 - Supports X86 cdecl, stdcall, fastcall, thiscall, GCC, Pascal, and custom register/stack layouts.
 - Supports X64 managed ABI and Microsoft `__vectorcall` intermediary stubs in both directions, including scalar, SIMD, HVA, and supported aggregate-return layouts on Windows and System V Linux.
@@ -42,7 +43,7 @@ Every package can also be referenced separately:
 |---|---|
 | `RedBird` | Meta-package for the main X64/X86 libraries and native backends |
 | `RedBird.Abstractions` | Backend-agnostic hook, transaction, and ABI contracts |
-| `RedBird.Core` | Executable memory, scanners, platform helpers, and the Linux X64 patch companion |
+| `RedBird.Core` | Native state, executable memory, scanners, platform helpers, and the Linux X64 patch companion |
 | `RedBird.X64` | X64 scanners, transactions, inline/context hooks, and executable functions |
 | `RedBird.X86` | X86 hooks and executable functions |
 | `RedBird.Backends.NativeX64` | Managed X64 function-detour engine |
@@ -264,6 +265,33 @@ The x64 implementation handles direct signed table-relative layouts commonly emi
 The x86 package handles absolute pointer tables and statically based relative tables, with optional byte remapping.
 
 See the [switch-dispatch guide](docs/articles/switch-dispatches.md) for supported shapes and boundary caveats.
+
+## Managed-updatable native state
+
+Use `NativeStateBlock` when managed callbacks change settings that an assembly stub reads often. 
+
+Flags use a stable one-byte `0`/`1` representation, including arrays:
+
+```csharp
+using RedBird.Core.Memory;
+using RedBird.X64.Extensions;
+using static Iced.Intel.AssemblerRegisters;
+
+using var state = new NativeStateBlock();
+NativeFlag enabled = state.AllocateFlag();
+NativeFlagArray enabledForPlayer = state.AllocateFlags(8);
+
+enabled.Value = config.Enabled;
+enabledForPlayer[player] = true;
+
+asm.TestNativeFlag(enabled, r11);
+asm.jz(disabled);
+```
+
+`TestNativeFlag` reads native memory directly and leaves the comparison flags for the following branch;
+its scratch register is preserved by default. Keep the state block alive until every referencing hook is
+removed. See [managed-updatable native state](docs/articles/native-state.md) for arrays and lifetime rules.
+
 ## Platform support
 
 | Feature | Windows X64 | Windows X86 | Linux X64 | Linux X86 |

@@ -13,6 +13,7 @@ Start with [Getting started](articles/getting-started.md), then choose the guide
 case:
 
 - [Hooks and backends](articles/hooks-and-backends.md)
+- [Managed-updatable native state](articles/native-state.md)
 - [Calling-convention adapters](articles/calling-conventions.md)
 - [Executable functions](articles/executable-functions.md)
 - [API reference](api/index.md)

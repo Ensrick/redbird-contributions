@@ -77,5 +77,6 @@ Be aware that `/proc` must be mounted, the option defaults to false in a constra
 
 - Use [transactions](hooks-and-backends.md) to resolve patterns, RVAs, exports, and addresses in one
   shared scan.
+- Use [managed-updatable native state](native-state.md) for settings read directly by assembly stubs.
 - Use [calling-convention adapters](calling-conventions.md) for X86 custom ABIs or X64 vectorcall.
 - Use [executable functions](executable-functions.md) for native test targets and generated adapters.

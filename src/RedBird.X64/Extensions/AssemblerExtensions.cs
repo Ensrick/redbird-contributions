@@ -1,6 +1,7 @@
 using Iced.Intel;
 using System;
 using System.ComponentModel;
+using RedBird.Core.Memory;
 using static Iced.Intel.AssemblerRegisters;
 
 namespace RedBird.X64.Extensions;
@@ -25,7 +26,7 @@ public static class AssemblerExtensions
     /// </remarks>
     public static void AddUnrestrictedJmp(this Assembler assembler, UInt64 address)
     {
-        byte[] jmpRipInstruction = [0xFF, 0x25, 0x00, 0x00, 0x00, 0x00 ];
+        byte[] jmpRipInstruction = [0xFF, 0x25, 0x00, 0x00, 0x00, 0x00];
         assembler.db(jmpRipInstruction);
         assembler.dq(address);
     }
@@ -315,7 +316,7 @@ public static class AssemblerExtensions
         Action<Assembler>? prepareArgumentsAction = null,
         bool preserveRAX = true,
         bool preserveXMM = false,
-        params X64StackArgument[] stackArguments) => 
+        params X64StackArgument[] stackArguments) =>
         X64FastcallSafe(assembler, (UInt64)System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(managedCallback), totalArgumentCount, prepareArgumentsAction, preserveRAX, preserveXMM, stackArguments);
 
     /// <summary>
@@ -517,5 +518,56 @@ public static class AssemblerExtensions
                 assembler.mov(destRegister, sourceRegister);
             }
         }
+    }
+
+    /// <summary>
+    /// Compares a managed-updatable native flag with zero, ready for a conditional jump.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This emits a direct native-memory read; it does not call into managed code. When
+    /// <paramref name="preserveScratch"/> is true, the scratch register is restored with
+    /// <c>pop</c>, which does not alter the flags produced by <c>cmp</c>.
+    /// </para>
+    /// <para>Branch immediately after this helper so later instructions do not replace the flags.</para>
+    /// </remarks>
+    public static void TestNativeFlag(
+        this Assembler assembler,
+        NativeFlag flag,
+        AssemblerRegister64 scratchRegister,
+        bool preserveScratch = true)
+    {
+        if (flag is null)
+            throw new ArgumentNullException(nameof(flag));
+
+        TestNativeFlag(assembler, flag.Address, scratchRegister, preserveScratch);
+    }
+
+    /// <summary>
+    /// Compares one managed-updatable native flag-array element with zero, ready for a conditional jump.
+    /// </summary>
+    public static void TestNativeFlag(this Assembler assembler, NativeFlagArray flags, int index, AssemblerRegister64 scratchRegister, bool preserveScratch = true)
+    {
+        if (flags is null)
+            throw new ArgumentNullException(nameof(flags));
+
+        TestNativeFlag(assembler, flags.GetAddress(index), scratchRegister, preserveScratch);
+    }
+
+    private static void TestNativeFlag(Assembler assembler, UInt64 address, AssemblerRegister64 scratchRegister, bool preserveScratch)
+    {
+        if (assembler is null)
+            throw new ArgumentNullException(nameof(assembler));
+        if (scratchRegister == rsp)
+            throw new ArgumentException("RSP cannot be used as the native-state scratch register.", nameof(scratchRegister));
+
+        if (preserveScratch)
+            assembler.push(scratchRegister);
+
+        assembler.mov(scratchRegister, address);
+        assembler.cmp(__byte_ptr[scratchRegister], 0);
+
+        if (preserveScratch)
+            assembler.pop(scratchRegister);
     }
 }
