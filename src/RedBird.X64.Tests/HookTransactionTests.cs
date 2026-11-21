@@ -1,4 +1,4 @@
-﻿using Iced.Intel;
+using Iced.Intel;
 using RedBird.Abstractions.Hooks;
 using RedBird.Abstractions.Hooks.Transaction;
 using RedBird.Core.Memory;
@@ -10,6 +10,7 @@ using RedBird.X64.Hooks.Transaction;
 using RedBird.X64.Memory.Scanners;
 using RedBird.X64.Tests.Infrastructure;
 using System;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Xunit;
 using static Iced.Intel.AssemblerRegisters;
@@ -330,6 +331,240 @@ public sealed class HookTransactionTests
     // -------------------------------------------------------------------------
     // Inline hooks
     // -------------------------------------------------------------------------
+
+    [Fact]
+    public void AddInlineFactory_ReceivesTheResolvedOwnerBeforeGenerationAndPublishesOnlyAfterPreparation()
+    {
+        using ExecutableFunction target = TestFunctions.Constant(0x1234);
+        byte[] original = target.ReadCurrentBytes(target.CodeLength);
+        using HookTransaction tx = Transaction(target, new HookTransactionOptions
+        {
+            Backend = Backend(),
+            InstallOnCommit = false,
+        });
+        HookHandle<X64InlineHook> handle = new();
+        X64InlineHook? factoryOwner = null;
+        WeakReference<TestDelegates.NullaryInt>? callbackReference = null;
+        int factoryCalls = 0, generatorCalls = 0;
+        int commitThread = Environment.CurrentManagedThreadId;
+
+        tx.AddInlineFactory(handle, HookTarget.FromPattern("B8 34 12 00 00"), owner =>
+        {
+            factoryCalls++;
+            factoryOwner = owner;
+            Assert.Equal(commitThread, Environment.CurrentManagedThreadId);
+            Assert.Equal(target.Address, owner.TargetAddress);
+            Assert.Equal(HookState.Created, owner.State);
+            Assert.Equal(IntPtr.Zero, owner.StubAddress);
+            Assert.False(handle.Success);
+            Assert.Null(handle.Hook);
+            Assert.Equal<byte>(original, target.ReadCurrentBytes(target.CodeLength));
+            IntPtr callback = PinFactoryCallback(owner, out callbackReference);
+            Assert.NotEqual(IntPtr.Zero, callback);
+            return (assembler, overwritten, returnAddress) =>
+            {
+                generatorCalls++;
+                Assert.Equal(commitThread, Environment.CurrentManagedThreadId);
+                Assert.Same(factoryOwner, owner);
+                Assert.Equal(HookState.Created, owner.State);
+                Assert.Equal(IntPtr.Zero, owner.StubAddress);
+                Assert.False(handle.Success);
+                Assert.Equal(target.Address + (ulong)owner.DisplacedByteCount, returnAddress);
+                Assert.False(overwritten.IsEmpty);
+                Assert.Equal(target.Address, overwritten[0].IP);
+                Assert.Equal<byte>(original, target.ReadCurrentBytes(target.CodeLength));
+                // Use the pinned pointer as generated data, without invoking the
+                // callback or target. The library remains the sole Generate caller.
+                assembler.mov(r11, unchecked((ulong)callback.ToInt64()));
+                foreach (Instruction instruction in overwritten)
+                    assembler.AddInstruction(instruction);
+            };
+        });
+
+        Assert.Equal(0, factoryCalls);
+        Assert.Equal(0, generatorCalls);
+        Assert.False(handle.Success);
+        Assert.Equal("handle", handle.Name);
+        CommitResult result = tx.Commit();
+        Assert.True(result.IsCompleteSuccess);
+        Assert.Equal(1, factoryCalls);
+        Assert.Equal(1, generatorCalls);
+        X64InlineHook hook = handle.Require();
+        Assert.Same(factoryOwner, hook);
+        Assert.Same(hook, Assert.Single(result.Installed));
+        Assert.Same(hook, Assert.Single(tx.Hooks));
+        Assert.Equal(target.Address, handle.ResolvedAddress);
+        Assert.Equal(HookState.Prepared, hook.State);
+        Assert.False(handle.IsInstalled);
+        Assert.NotEqual(IntPtr.Zero, hook.StubAddress);
+        Assert.Equal<byte>(original, target.ReadCurrentBytes(target.CodeLength));
+
+        WeakReference<TestDelegates.NullaryInt> reference = Assert.IsType<WeakReference<TestDelegates.NullaryInt>>(callbackReference);
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        Assert.True(reference.TryGetTarget(out _), "The actual hook must root its factory-pinned delegate.");
+
+        tx.EnableAll();
+        Assert.Equal(HookState.Installed, hook.State);
+        Assert.False(target.MatchesOriginal(target.CodeLength));
+        tx.DisableAll();
+        Assert.Equal<byte>(original, target.ReadCurrentBytes(target.CodeLength));
+        tx.Dispose();
+        Assert.Equal(HookState.Disposed, hook.State);
+        Assert.Equal(1, factoryCalls);
+        Assert.Equal(1, generatorCalls);
+    }
+
+    [Fact]
+    public void AddInlineFactory_RejectsNullInputsDuringRegistration()
+    {
+        using ExecutableFunction target = TestFunctions.Constant(7);
+        using HookTransaction tx = Transaction(target);
+        HookHandle<X64InlineHook> handle = new();
+        HookTarget site = HookTarget.FromAddress(target.Address);
+
+        ArgumentNullException factoryFailure = Assert.Throws<ArgumentNullException>(() =>
+            tx.AddInlineFactory(handle, site, null!));
+        Assert.Equal("generatorFactory", factoryFailure.ParamName);
+        ArgumentNullException handleFailure = Assert.Throws<ArgumentNullException>(() =>
+            tx.AddInlineFactory(null!, site, _ => static (assembler, _, _) => assembler.nop()));
+        Assert.Equal("handle", handleFailure.ParamName);
+        Assert.False(handle.Success);
+        Assert.Null(handle.Failure);
+        Assert.Equal(TransactionState.Building, tx.State);
+        Assert.True(target.MatchesOriginal(target.CodeLength));
+    }
+
+    [Theory]
+    [InlineData("factory-throws")]
+    [InlineData("factory-returns-null")]
+    [InlineData("generator-throws")]
+    public void AddInlineFactory_ContinueOnErrorDisposesTheFailedOwnerAndPreparesTheNextSite(string failureKind)
+    {
+        using ExecutableFunction target = CreateFactorySites();
+        byte[] original = target.ReadCurrentBytes(target.CodeLength);
+        using HookTransaction tx = Transaction(target, new HookTransactionOptions
+        {
+            Backend = Backend(),
+            InstallOnCommit = false,
+            FailureMode = TransactionFailureMode.ContinueOnError,
+        });
+        HookHandle<X64InlineHook> failed = new(), good = new();
+        X64InlineHook? failedOwner = null;
+        InvalidOperationException expected = new("Controlled inline factory preparation failure.");
+        int factoryCalls = 0, generatorCalls = 0, goodGeneratorCalls = 0;
+        tx.AddInlineFactory(failed, HookTarget.FromAddress(target.Address), owner =>
+        {
+            factoryCalls++;
+            failedOwner = owner;
+            Assert.Equal(HookState.Created, owner.State);
+            Assert.False(failed.Success);
+            if (failureKind == "factory-throws") throw expected;
+            if (failureKind == "factory-returns-null") return null!;
+            return (_, _, _) => { generatorCalls++; throw expected; };
+        }, name: "failed-factory");
+        // The established generator overload continues to work beside the new API.
+        tx.AddInline(good, HookTarget.FromAddress(target.Address + 32), (assembler, _, _) =>
+        { goodGeneratorCalls++; assembler.nop(); }, name: "later-site");
+
+        CommitResult result = tx.Commit();
+        Assert.False(result.IsCompleteSuccess);
+        Assert.Equal(2, result.RegisteredCount);
+        HookFailure failure = Assert.Single(result.Failures);
+        Assert.Equal(HookFailurePhase.Prepare, failure.Phase);
+        Assert.Equal("failed-factory", failure.Name);
+        Assert.Equal(1, factoryCalls);
+        Assert.Equal(failureKind == "generator-throws" ? 1 : 0, generatorCalls);
+        Assert.Equal(1, goodGeneratorCalls);
+        X64InlineHook discarded = Assert.IsType<X64InlineHook>(failedOwner);
+        Assert.Equal(HookState.Disposed, discarded.State);
+        Assert.Equal(IntPtr.Zero, discarded.StubAddress);
+        Assert.Null(failed.Hook);
+        Assert.False(failed.Success);
+        Assert.NotNull(failed.Failure);
+        if (failureKind != "factory-returns-null") Assert.Same(expected, failure.Exception);
+        else Assert.IsType<InvalidOperationException>(failure.Exception);
+        Assert.Same(good.Require(), Assert.Single(result.Installed));
+        Assert.Equal(HookState.Prepared, good.Require().State);
+        Assert.False(good.IsInstalled);
+        Assert.Equal<byte>(original, target.ReadCurrentBytes(target.CodeLength));
+    }
+
+    [Theory]
+    [InlineData("factory-throws")]
+    [InlineData("factory-returns-null")]
+    [InlineData("generator-throws")]
+    public void AddInlineFactory_RollbackDisposesEarlierPreparationAndNeverPublishesEitherHandle(string failureKind)
+    {
+        using ExecutableFunction target = CreateFactorySites();
+        byte[] original = target.ReadCurrentBytes(target.CodeLength);
+        using HookTransaction tx = Transaction(target, new HookTransactionOptions
+        {
+            Backend = Backend(),
+            FailureMode = TransactionFailureMode.RollbackAndThrow,
+        });
+        HookHandle<X64InlineHook> good = new(), failed = new();
+        X64InlineHook? preparedOwner = null, failedOwner = null;
+        InvalidOperationException expected = new("Controlled inline factory rollback failure.");
+        int goodFactoryCalls = 0, goodGeneratorCalls = 0, failedFactoryCalls = 0, failedGeneratorCalls = 0;
+        tx.AddInlineFactory(good, HookTarget.FromAddress(target.Address), owner =>
+        {
+            goodFactoryCalls++;
+            preparedOwner = owner;
+            return (assembler, _, _) => { goodGeneratorCalls++; assembler.nop(); };
+        }, name: "prepared-site");
+        tx.AddInlineFactory(failed, HookTarget.FromAddress(target.Address + 32), owner =>
+        {
+            failedFactoryCalls++;
+            failedOwner = owner;
+            Assert.Equal(HookState.Prepared, preparedOwner!.State);
+            Assert.False(good.Success);
+            Assert.False(failed.Success);
+            Assert.Equal<byte>(original, target.ReadCurrentBytes(target.CodeLength));
+            if (failureKind == "factory-throws") throw expected;
+            if (failureKind == "factory-returns-null") return null!;
+            return (_, _, _) => { failedGeneratorCalls++; throw expected; };
+        }, name: "failed-factory");
+
+        HookTransactionException failure = Assert.Throws<HookTransactionException>(() => tx.Commit());
+        Assert.Equal(TransactionState.RolledBack, tx.State);
+        Assert.Equal(1, goodFactoryCalls);
+        Assert.Equal(1, goodGeneratorCalls);
+        Assert.Equal(1, failedFactoryCalls);
+        Assert.Equal(failureKind == "generator-throws" ? 1 : 0, failedGeneratorCalls);
+        Assert.Equal(HookState.Disposed, Assert.IsType<X64InlineHook>(preparedOwner).State);
+        Assert.Equal(HookState.Disposed, Assert.IsType<X64InlineHook>(failedOwner).State);
+        Assert.False(good.Success);
+        Assert.False(failed.Success);
+        Assert.Null(good.Hook);
+        Assert.Null(failed.Hook);
+        Assert.NotNull(failed.Failure);
+        Assert.Empty(tx.Hooks);
+        if (failureKind != "factory-returns-null") Assert.Same(expected, failure.InnerException);
+        else Assert.IsType<InvalidOperationException>(failure.InnerException);
+        Assert.Equal<byte>(original, target.ReadCurrentBytes(target.CodeLength));
+    }
+
+    private static ExecutableFunction CreateFactorySites() => ExecutableFunction.Create(assembler =>
+    {
+        // Two disjoint 14-byte sites in one owned code page; neither is executed.
+        for (int index = 0; index < 64; index++) assembler.nop();
+        assembler.ret();
+    });
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static IntPtr PinFactoryCallback(X64InlineHook owner, out WeakReference<TestDelegates.NullaryInt> reference)
+    {
+        TestDelegates.NullaryInt callback = new FactoryCallbackTarget().Invoke;
+        reference = new(callback);
+        return owner.PinDelegate(callback);
+    }
+
+    private sealed class FactoryCallbackTarget
+    {
+        internal int Invoke() => 37;
+    }
 
     [Fact]
     public void AddInline_RunsGeneratedCodeAndReturnsToTheFunction()

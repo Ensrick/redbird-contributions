@@ -208,6 +208,43 @@ public sealed class HookTransaction : IDisposable
         return handle;
     }
 
+    /// <summary>Registers an inline hook whose generator needs its actual transaction-owned hook.</summary>
+    /// <param name="handle">Populated only in the publish phase after successful preparation and optional installation.</param>
+    /// <param name="target">Pattern, relative-call destination, address, RVA or export.</param>
+    /// <param name="generatorFactory">Builds a generator using the real resolved hook, for example to pin delegates on that owner.</param>
+    /// <param name="hookSize">Minimum bytes to displace; clamped to at least 14, as with <see cref="AddInline"/>.</param>
+    /// <param name="name">Defaults to the handle's expression text.</param>
+    /// <remarks>
+    /// The factory runs synchronously on the thread calling <see cref="Commit"/>, once per site whose
+    /// preparation is reached, after target resolution and hook construction. It does not run at
+    /// registration or as an invocation by the installed hook. Resolution failure or an earlier rollback
+    /// can prevent invocation. The factory may use <see cref="X64InlineHook.PinDelegate"/> or return an
+    /// owner-bound generator; the library alone calls <see cref="X64InlineHook.Generate"/> exactly once.
+    /// Neither the factory nor its generator may call Generate, Enable, Disable or Dispose on this
+    /// owner, patch this target, invoke the target routine or publish the handle. Pinned delegates
+    /// belong to this hook until it is disposed; a captured owner does not transfer ownership.
+    /// A thrown factory/generator or a null factory result is a prepare failure: the candidate is
+    /// disposed and the transaction's existing failure policy applies. No target bytes are written
+    /// during preparation. The newly prepared hook is not attached to the handle until publication;
+    /// use the supplied owner instead of handle.Require from the factory or generator.
+    /// With InstallOnCommit false, Success means a prepared hook exists,
+    /// not that IsInstalled is true; retain the transaction/hook for subsequent activation.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">The handle or factory is null at registration.</exception>
+    public HookHandle<X64InlineHook> AddInlineFactory(
+        HookHandle<X64InlineHook> handle,
+        HookTarget target,
+        Func<X64InlineHook, InlineHookGenerator> generatorFactory,
+        int hookSize = 14,
+        [CallerArgumentExpression(nameof(handle))] string name = "")
+    {
+        ArgumentNullThrow(handle, nameof(handle));
+        ArgumentNullThrow(generatorFactory, nameof(generatorFactory));
+
+        Register(new InlineFactoryDescriptor(name, target, handle, generatorFactory, hookSize), handle, name);
+        return handle;
+    }
+
     /// <summary>
     /// Registers an in-place assembly patch: the generated body is written directly over the target's instructions, overwriting them, with no stub or return path.
     /// </summary>
