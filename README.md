@@ -174,6 +174,11 @@ transaction.AddContextHook(
     OnContext);
 ```
 
+For X64 generators that need their actual hook owner, `AddInlineFactory` supplies
+it during preparation so callbacks can be pinned on the hook that will be published.
+See [owner-aware inline generators](docs/articles/hooks-and-backends.md#owner-aware-x64-inline-generators)
+for preparation, failure and handle-lifetime contracts.
+
 When only a call site has a stable signature, resolve the direct relative `CALL` destination explicitly.
 This hooks the called function, while leaving the call instruction itself intact:
 
